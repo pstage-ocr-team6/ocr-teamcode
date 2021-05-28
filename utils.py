@@ -1,4 +1,5 @@
 import yaml
+from copy import deepcopy
 import torch.optim as optim
 
 from networks.Attention import Attention
