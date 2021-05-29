@@ -170,5 +170,6 @@ Thumbs.db
 
 #log
 log/
+wandb/
 .vscode/
 

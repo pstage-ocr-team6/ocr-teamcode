@@ -10,6 +10,8 @@ import torch.nn as nn
 import torch.optim as optim
 from torchvision import transforms
 import yaml
+import wandb
+from dotenv import load_dotenv
 from tqdm import tqdm
 from checkpoint import (
     default_checkpoint,
@@ -21,11 +23,14 @@ from checkpoint import (
 from psutil import virtual_memory
 
 from flags import Flags
-from utils import get_network, get_optimizer
+from utils import get_network, get_optimizer, get_wandb_config
 from dataset import dataset_loader, START, PAD,load_vocab
 from scheduler import CircularLRBeta
 
 from metrics import word_error_rate,sentence_acc
+
+# load env file
+load_dotenv(verbose=True)
 
 def id_to_string(tokens, data_loader,do_eval=0):
     result = []
@@ -165,7 +170,15 @@ def main(config_file):
     """
     options = Flags(config_file).get()
 
-    #set random seed
+    if options.wandb.wandb:
+        # yaml to dict
+        wandb_config = get_wandb_config(config_file)
+        # write run name
+        run_name = options.wandb.run_name if options.wandb.run_name else None
+        # intialize wandb project
+        wandb.init(project=os.getenv('PROJECT'), entity=os.getenv('ENTITY'), config=wandb_config, name=run_name)
+
+    # set random seed
     torch.manual_seed(options.seed)
     np.random.seed(options.seed)
     random.seed(options.seed)
@@ -377,31 +390,44 @@ def main(config_file):
         validation_wer.append(validation_epoch_wer)
 
         # Save checkpoint
-        #make config
+        # make config
         with open(config_file, 'r') as f:
             option_dict = yaml.safe_load(f)
+        # things to save
+        checkpoint_log = {
+            "epoch": start_epoch + epoch + 1,
+            "train_losses": train_losses,
+            "train_symbol_accuracy": train_symbol_accuracy,
+            "train_sentence_accuracy": train_sentence_accuracy,
+            "train_wer":train_wer,
+            "validation_losses": validation_losses,
+            "validation_symbol_accuracy": validation_symbol_accuracy,
+            "validation_sentence_accuracy":validation_sentence_accuracy,
+            "validation_wer":validation_wer,
+            "lr": epoch_lr,
+            "grad_norm": grad_norms,
+            "model": model.state_dict(),
+            "optimizer": optimizer.state_dict(),
+            "configs": option_dict,
+            "token_to_id":train_data_loader.dataset.token_to_id,
+            "id_to_token":train_data_loader.dataset.id_to_token
+        }
 
-        save_checkpoint(
-            {
-                "epoch": start_epoch + epoch + 1,
-                "train_losses": train_losses,
-                "train_symbol_accuracy": train_symbol_accuracy,
-                "train_sentence_accuracy": train_sentence_accuracy,
-                "train_wer":train_wer,
-                "validation_losses": validation_losses,
-                "validation_symbol_accuracy": validation_symbol_accuracy,
-                "validation_sentence_accuracy":validation_sentence_accuracy,
-                "validation_wer":validation_wer,
-                "lr": learning_rates,
-                "grad_norm": grad_norms,
-                "model": model.state_dict(),
-                "optimizer": optimizer.state_dict(),
-                "configs": option_dict,
-                "token_to_id":train_data_loader.dataset.token_to_id,
-                "id_to_token":train_data_loader.dataset.id_to_token
-            },
-            prefix=options.prefix,
-        )
+        save_checkpoint(checkpoint_log, prefix=options.prefix)
+        if options.wandb.wandb:
+            wandb_log = {}
+            # remove useless log
+            removed_keys = ['model', 'optimizer', 'configs', 'epoch', 'token_to_id', 'id_to_token']
+            for key in removed_keys:
+                del checkpoint_log[key]
+            # convert key-value datatype to int
+            for key, value in checkpoint_log.items():
+                if isinstance(value, list):
+                    wandb_log[key] = value[0]
+                else:
+                    wandb_log[key] = value
+            # save log in wandb
+            wandb.log(wandb_log)
 
         # Summary
         elapsed_time = time.time() - start_time
