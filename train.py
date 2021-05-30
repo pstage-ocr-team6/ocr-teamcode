@@ -86,10 +86,10 @@ def run_epoch(
     num_sent_acc = 0
 
     with tqdm(
-            desc="{} ({})".format(epoch_text, "Train" if train else "Validation"),
-            total=len(data_loader.dataset),
-            dynamic_ncols=True,
-            leave=False,
+        desc="{} ({})".format(epoch_text, "Train" if train else "Validation"),
+        total=len(data_loader.dataset),
+        dynamic_ncols=True,
+        leave=False,
     ) as pbar:
         for d in data_loader:
             input = d["image"].to(device)
