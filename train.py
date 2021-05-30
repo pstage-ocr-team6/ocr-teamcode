@@ -58,16 +58,16 @@ def id_to_string(tokens, data_loader, do_eval=0):
 
 
 def run_epoch(
-        data_loader,
-        model,
-        epoch_text,
-        criterion,
-        optimizer,
-        lr_scheduler,
-        teacher_forcing_ratio,
-        max_grad_norm,
-        device,
-        train=True,
+    data_loader,
+    model,
+    epoch_text,
+    criterion,
+    optimizer,
+    lr_scheduler,
+    teacher_forcing_ratio,
+    max_grad_norm,
+    device,
+    train=True,
 ):
     # Disables autograd during validation mode
     torch.set_grad_enabled(train)
