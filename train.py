@@ -423,7 +423,7 @@ def main(config_file):
             # convert key-value datatype to int
             for key, value in checkpoint_log.items():
                 if isinstance(value, list):
-                    wandb_log[key] = value[0]
+                    wandb_log[key] = value[-1]
                 else:
                     wandb_log[key] = value
             # save log in wandb
