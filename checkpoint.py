@@ -10,10 +10,12 @@ default_checkpoint = {
     "train_symbol_accuracy": [],
     "train_sentence_accuracy": [],
     "train_wer": [],
+    "train_score": [],
     "validation_losses": [],
     "validation_symbol_accuracy": [],
     "validation_sentence_accuracy": [],
     "validation_wer": [],
+    "validation_score": [],
     "lr": [],
     "grad_norm": [],
     "model": {},
@@ -52,20 +54,24 @@ def write_tensorboard(
     train_symbol_accuracy,
     train_sentence_accuracy,
     train_wer,
+    train_score,
     validation_loss,
     validation_symbol_accuracy,
     validation_sentence_accuracy,
     validation_wer,
+    validation_score,
     model,
 ):
     writer.add_scalar("train_loss", train_loss, epoch)
     writer.add_scalar("train_symbol_accuracy", train_symbol_accuracy, epoch)
     writer.add_scalar("train_sentence_accuracy",train_sentence_accuracy,epoch)
     writer.add_scalar("train_wer", train_wer, epoch)
+    writer.add_scalar("train_score", train_score, epoch)
     writer.add_scalar("validation_loss", validation_loss, epoch)
     writer.add_scalar("validation_symbol_accuracy", validation_symbol_accuracy, epoch)
     writer.add_scalar("validation_sentence_accuracy",validation_sentence_accuracy,epoch)
     writer.add_scalar("validation_wer",validation_wer,epoch)
+    writer.add_scalar("validation_score", validation_score, epoch)
     writer.add_scalar("grad_norm", grad_norm, epoch)
 
     for name, param in model.encoder.named_parameters():
