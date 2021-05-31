@@ -7,8 +7,8 @@ assignees: ''
 
 ---
 
-### ✨ Describe Your Feature
+### 😥 Explain the Problem
 
-### ✅ Simple Todos
+### ✨ Describe A New Feature
 
 ### 📄 Additional Context
