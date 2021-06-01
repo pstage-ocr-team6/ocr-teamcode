@@ -51,7 +51,7 @@ optimizer:
   weight_decay: 1e-4
   is_cycle: True
 
-patience: -1
+patience: -1 # -1 for off
 save_best_only: False
 
 wandb:
