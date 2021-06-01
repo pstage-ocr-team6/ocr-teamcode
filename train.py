@@ -198,9 +198,9 @@ def main(config_file, on_cpu):
     print("Running {} on device {}\n".format(options.network, device))
 
     # Print system environments
+    num_cpus = os.cpu_count()
+    mem_size = virtual_memory().available // (1024 ** 3)
     if on_cpu:
-        num_cpus = os.cpu_count()
-        mem_size = virtual_memory().available // (1024 ** 3)
         print(
             "[+] System environments\n",
             "The number of cpus : {}\n".format(num_cpus),
@@ -208,8 +208,6 @@ def main(config_file, on_cpu):
         )
     else:
         num_gpus = torch.cuda.device_count()
-        num_cpus = os.cpu_count()
-        mem_size = virtual_memory().available // (1024 ** 3)
         print(
             "[+] System environments\n",
             "The number of gpus : {}\n".format(num_gpus),
@@ -339,7 +337,6 @@ def main(config_file, on_cpu):
     validation_sentence_accuracy = checkpoint["validation_sentence_accuracy"]
     validation_wer = checkpoint["validation_wer"]
     validation_score = checkpoint["validation_score"]
-    validation_score = [0.9 * acc + 0.1 * wer for acc, wer in zip(validation_sentence_accuracy, validation_wer)]
     validation_losses = checkpoint["validation_losses"]
     learning_rates = checkpoint["lr"]
     grad_norms = checkpoint["grad_norm"]
@@ -366,11 +363,11 @@ def main(config_file, on_cpu):
             'wer': 1e9, 
             'symbol_accuracy': 0,
         }
-    no_inrease = 0
+    no_increase = 0
     
     # Train
     for epoch in range(options.num_epochs):
-        if options.patience >= 0 and no_inrease > options.patience:
+        if options.patience >= 0 and no_increase > options.patience:
             break
         
         start_time = time.time()
@@ -471,9 +468,9 @@ def main(config_file, on_cpu):
                 'wer': validation_epoch_wer, 
                 'sym_acc': validation_epoch_symbol_accuracy,
             }
-            no_inrease = 0
+            no_increase = 0
         else:
-            no_inrease += 1
+            no_increase += 1
 
         # Save checkpoint
         if not options.save_best_only or validation_epoch_score > best_score['score']:
