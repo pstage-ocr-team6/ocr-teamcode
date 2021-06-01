@@ -432,6 +432,19 @@ def main(config_file, on_cpu):
                 (float(validation_epoch_sentence_accuracy) * 0.9) + ((1 - float(validation_epoch_wer)) * 0.1)
         )
         validation_score.append(validation_epoch_score)
+        
+        # update best score
+        if validation_epoch_score > best_score['score']:
+            best_score = {
+                'epoch': start_epoch + epoch + 1, 
+                'score': validation_epoch_score, 
+                'sent_acc': validation_epoch_sentence_accuracy, 
+                'wer': validation_epoch_wer, 
+                'sym_acc': validation_epoch_symbol_accuracy,
+            }
+            no_inrease = 0
+        else:
+            no_inrease += 1
 
         # Save checkpoint
         if not options.save_best_only or validation_epoch_score > best_score['score']:
@@ -457,14 +470,15 @@ def main(config_file, on_cpu):
                 "optimizer": optimizer.state_dict(),
                 "configs": option_dict,
                 "token_to_id": train_data_loader.dataset.token_to_id,
-                "id_to_token": train_data_loader.dataset.id_to_token
+                "id_to_token": train_data_loader.dataset.id_to_token,
+                "best_score": best_score,
             }
 
             save_checkpoint(checkpoint_log, prefix=options.prefix)
         if options.wandb.wandb:
             wandb_log = {}
             # remove useless log
-            removed_keys = ['model', 'optimizer', 'configs', 'epoch', 'token_to_id', 'id_to_token']
+            removed_keys = ['model', 'optimizer', 'configs', 'epoch', 'token_to_id', 'id_to_token', 'best_score']
             for key in removed_keys:
                 del checkpoint_log[key]
             # convert key-value datatype to int
@@ -492,6 +506,7 @@ def main(config_file, on_cpu):
                 "Validation WER = {validation_wer:.5f}, "
                 "Validation Score = {validation_score:.5f}, "
                 "Validation Loss = {validation_loss:.5f}, "
+                "Best Model Epoch = {best_epoch}, "
                 "lr = {lr} "
                 "(time elapsed {time})"
             ).format(
@@ -506,6 +521,7 @@ def main(config_file, on_cpu):
                 validation_wer=validation_epoch_wer,
                 validation_score=validation_epoch_score,
                 validation_loss=validation_result["loss"],
+                best_epoch=best_score["epoch"],
                 lr=epoch_lr,
                 time=elapsed_time,
             )
@@ -528,18 +544,6 @@ def main(config_file, on_cpu):
                 model,
             )
         
-        # update best score
-        if validation_epoch_score > best_score['score']:
-            best_score = {
-                'epoch': start_epoch + epoch + 1, 
-                'score': validation_epoch_score, 
-                'sent_acc': validation_epoch_sentence_accuracy, 
-                'wer': validation_epoch_wer, 
-                'sym_acc': validation_epoch_symbol_accuracy,
-            }
-            no_inrease = 0
-        else:
-            no_inrease += 1
     
     best_score = {' '.join(k.split('_')).title(): v for k, v in best_score.items()}
     print(f"\nBEST MODEL:\n{best_score}")
@@ -558,4 +562,5 @@ if __name__ == "__main__":
     parser.add_argument("--cpu", action="store_true")
     
     parser = parser.parse_args()
+    
     main(parser.config_file, parser.cpu)
