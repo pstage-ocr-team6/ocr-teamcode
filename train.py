@@ -198,9 +198,9 @@ def main(config_file, on_cpu):
     print("Running {} on device {}\n".format(options.network, device))
 
     # Print system environments
+    num_cpus = os.cpu_count()
+    mem_size = virtual_memory().available // (1024 ** 3)
     if on_cpu:
-        num_cpus = os.cpu_count()
-        mem_size = virtual_memory().available // (1024 ** 3)
         print(
             "[+] System environments\n",
             "The number of cpus : {}\n".format(num_cpus),
@@ -208,8 +208,6 @@ def main(config_file, on_cpu):
         )
     else:
         num_gpus = torch.cuda.device_count()
-        num_cpus = os.cpu_count()
-        mem_size = virtual_memory().available // (1024 ** 3)
         print(
             "[+] System environments\n",
             "The number of gpus : {}\n".format(num_gpus),
