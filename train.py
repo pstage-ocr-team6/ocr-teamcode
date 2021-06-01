@@ -179,6 +179,10 @@ def main(config_file, on_cpu):
         run_name = options.wandb.run_name if options.wandb.run_name else None
         # intialize wandb project
         wandb.init(project=os.getenv('PROJECT'), entity=os.getenv('ENTITY'), config=wandb_config, name=run_name)
+        
+    # make config
+    with open(config_file, 'r') as f:
+        option_dict = yaml.safe_load(f)
 
     # set random seed
     torch.manual_seed(options.seed)
@@ -435,19 +439,6 @@ def main(config_file, on_cpu):
         )
         validation_score.append(validation_epoch_score)
         
-        # update best score
-        if validation_epoch_score > best_score['score']:
-            best_score = {
-                'epoch': start_epoch + epoch + 1, 
-                'score': validation_epoch_score, 
-                'sent_acc': validation_epoch_sentence_accuracy, 
-                'wer': validation_epoch_wer, 
-                'sym_acc': validation_epoch_symbol_accuracy,
-            }
-            no_inrease = 0
-        else:
-            no_inrease += 1
-        
         # things to save
         checkpoint_log = {
             "epoch": start_epoch + epoch + 1,
@@ -470,13 +461,22 @@ def main(config_file, on_cpu):
             "id_to_token": train_data_loader.dataset.id_to_token,
             "best_score": best_score,
         }
+        
+        # update best score
+        if validation_epoch_score > best_score['score']:
+            best_score = {
+                'epoch': start_epoch + epoch + 1, 
+                'score': validation_epoch_score, 
+                'sent_acc': validation_epoch_sentence_accuracy, 
+                'wer': validation_epoch_wer, 
+                'sym_acc': validation_epoch_symbol_accuracy,
+            }
+            no_inrease = 0
+        else:
+            no_inrease += 1
 
         # Save checkpoint
         if not options.save_best_only or validation_epoch_score > best_score['score']:
-            # make config
-            with open(config_file, 'r') as f:
-                option_dict = yaml.safe_load(f)
-
             save_checkpoint(checkpoint_log, prefix=options.prefix)
             
         if options.wandb.wandb:
