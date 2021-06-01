@@ -194,7 +194,7 @@ def main(config_file, on_cpu):
     print("Running {} on device {}\n".format(options.network, device))
 
     # Print system environments
-    if not on_cpu:
+    if on_cpu:
         num_cpus = os.cpu_count()
         mem_size = virtual_memory().available // (1024 ** 3)
         print(
