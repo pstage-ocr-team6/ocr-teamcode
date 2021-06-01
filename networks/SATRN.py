@@ -539,7 +539,7 @@ class TransformerDecoder(nn.Module):
 
                 _out = self.generator(tgt)  # [b, 1, c]
                 target = torch.argmax(_out[:, -1:, :], dim=-1)  # [b, 1]
-                target = target.squeeze()   # [b]
+                target = target.squeeze(1)   # [b]
                 out.append(_out)
             
             out = torch.stack(out, dim=1).to(device)    # [b, max length, 1, class length]
