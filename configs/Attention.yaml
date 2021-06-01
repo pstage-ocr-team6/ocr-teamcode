@@ -25,11 +25,11 @@ prefix: "./log/attention_50"
 
 data:
   train:
-    - "../../train_dataset/gt.txt"
+    - "/opt/ml/input/data/train_dataset/gt.txt"
   test:
     - ""
   token_paths:
-    - "../../train_dataset/tokens.txt"  # 241 tokens
+    - "/opt/ml/input/data/train_dataset/tokens.txt"  # 241 tokens
   dataset_proportions:  # proportion of data to take from train (not test)
     - 1.0
   random_split: True # if True, random split from train files
@@ -50,6 +50,9 @@ optimizer:
   lr: 5e-4 # 1e-4
   weight_decay: 1e-4
   is_cycle: True
+
+patience: -1
+save_best_only: False
 
 wandb:
   wandb: True

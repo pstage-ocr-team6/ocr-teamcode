@@ -166,7 +166,7 @@ def run_epoch(
     return result
 
 
-def main(config_file):
+def main(config_file, on_cpu):
     """
     Train math formula recognition model
     """
@@ -187,22 +187,31 @@ def main(config_file):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
-    is_cuda = torch.cuda.is_available()
+    is_cuda = torch.cuda.is_available() and not on_cpu
     hardware = "cuda" if is_cuda else "cpu"
     device = torch.device(hardware)
     print("--------------------------------")
     print("Running {} on device {}\n".format(options.network, device))
 
     # Print system environments
-    num_gpus = torch.cuda.device_count()
-    num_cpus = os.cpu_count()
-    mem_size = virtual_memory().available // (1024 ** 3)
-    print(
-        "[+] System environments\n",
-        "The number of gpus : {}\n".format(num_gpus),
-        "The number of cpus : {}\n".format(num_cpus),
-        "Memory Size : {}G\n".format(mem_size),
-    )
+    if not on_cpu:
+        num_cpus = os.cpu_count()
+        mem_size = virtual_memory().available // (1024 ** 3)
+        print(
+            "[+] System environments\n",
+            "The number of cpus : {}\n".format(num_cpus),
+            "Memory Size : {}G\n".format(mem_size),
+        )
+    else:
+        num_gpus = torch.cuda.device_count()
+        num_cpus = os.cpu_count()
+        mem_size = virtual_memory().available // (1024 ** 3)
+        print(
+            "[+] System environments\n",
+            "The number of gpus : {}\n".format(num_gpus),
+            "The number of cpus : {}\n".format(num_cpus),
+            "Memory Size : {}G\n".format(mem_size),
+        )
 
     # Load checkpoint and print result
     checkpoint = (
@@ -212,6 +221,19 @@ def main(config_file):
     )
     model_checkpoint = checkpoint["model"]
     if model_checkpoint:
+        if checkpoint.get("train_score") is None:
+            checkpoint["train_score"] = [
+                0.9 * acc + 0.1 * wer 
+                for acc, wer 
+                in zip(checkpoint["train_sentence_accuracy"], checkpoint["train_wer"])
+            ]
+        if checkpoint.get("validation_score") is None:
+            checkpoint["validation_score"] = [
+                0.9 * acc + 0.1 * wer 
+                for acc, wer 
+                in zip(checkpoint["validation_sentence_accuracy"], checkpoint["validation_wer"])
+            ]
+            
         print(
             "[+] Checkpoint\n",
             "Resuming from epoch : {}\n".format(checkpoint["epoch"]),
@@ -313,12 +335,35 @@ def main(config_file):
     validation_sentence_accuracy = checkpoint["validation_sentence_accuracy"]
     validation_wer = checkpoint["validation_wer"]
     validation_score = checkpoint["validation_score"]
+    validation_score = [0.9 * acc + 0.1 * wer for acc, wer in zip(validation_sentence_accuracy, validation_wer)]
     validation_losses = checkpoint["validation_losses"]
     learning_rates = checkpoint["lr"]
     grad_norms = checkpoint["grad_norm"]
 
+    # Best score
+    if options.checkpoint:
+        best_score = {
+            'epoch': start_epoch, 
+            'score': validation_score[-1], 
+            'sentence_accuracy': validation_sentence_accuracy[-1], 
+            'wer': validation_wer[-1], 
+            'symbol_accuracy': validation_symbol_accuracy[-1],
+        }
+    else:
+        best_score = {
+            'epoch': 0, 
+            'score': 0, 
+            'sentence_accuracy': 0, 
+            'wer': 1e9, 
+            'symbol_accuracy': 0,
+        }
+    no_inrease = 0
+    
     # Train
     for epoch in range(options.num_epochs):
+        if options.patience >= 0 and no_inrease > options.patience:
+            break
+        
         start_time = time.time()
 
         epoch_text = "[{current:>{pad}}/{end}] Epoch {epoch}".format(
@@ -386,32 +431,33 @@ def main(config_file):
         validation_score.append(validation_epoch_score)
 
         # Save checkpoint
-        # make config
-        with open(config_file, 'r') as f:
-            option_dict = yaml.safe_load(f)
-        # things to save
-        checkpoint_log = {
-            "epoch": start_epoch + epoch + 1,
-            "train_losses": train_losses,
-            "train_symbol_accuracy": train_symbol_accuracy,
-            "train_sentence_accuracy": train_sentence_accuracy,
-            "train_wer": train_wer,
-            "train_score": train_score,
-            "validation_losses": validation_losses,
-            "validation_symbol_accuracy": validation_symbol_accuracy,
-            "validation_sentence_accuracy": validation_sentence_accuracy,
-            "validation_wer": validation_wer,
-            "validation_score": validation_score,
-            "lr": epoch_lr,
-            "grad_norm": grad_norms,
-            "model": model.state_dict(),
-            "optimizer": optimizer.state_dict(),
-            "configs": option_dict,
-            "token_to_id": train_data_loader.dataset.token_to_id,
-            "id_to_token": train_data_loader.dataset.id_to_token
-        }
+        if not options.save_best_only or validation_epoch_score > best_score['score']:
+            # make config
+            with open(config_file, 'r') as f:
+                option_dict = yaml.safe_load(f)
+            # things to save
+            checkpoint_log = {
+                "epoch": start_epoch + epoch + 1,
+                "train_losses": train_losses,
+                "train_symbol_accuracy": train_symbol_accuracy,
+                "train_sentence_accuracy": train_sentence_accuracy,
+                "train_wer": train_wer,
+                "train_score": train_score,
+                "validation_losses": validation_losses,
+                "validation_symbol_accuracy": validation_symbol_accuracy,
+                "validation_sentence_accuracy": validation_sentence_accuracy,
+                "validation_wer": validation_wer,
+                "validation_score": validation_score,
+                "lr": epoch_lr,
+                "grad_norm": grad_norms,
+                "model": model.state_dict(),
+                "optimizer": optimizer.state_dict(),
+                "configs": option_dict,
+                "token_to_id": train_data_loader.dataset.token_to_id,
+                "id_to_token": train_data_loader.dataset.id_to_token
+            }
 
-        save_checkpoint(checkpoint_log, prefix=options.prefix)
+            save_checkpoint(checkpoint_log, prefix=options.prefix)
         if options.wandb.wandb:
             wandb_log = {}
             # remove useless log
@@ -478,6 +524,22 @@ def main(config_file):
                 validation_epoch_score,
                 model,
             )
+        
+        # update best score
+        if validation_epoch_score > best_score['score']:
+            best_score = {
+                'epoch': start_epoch + epoch + 1, 
+                'score': validation_epoch_score, 
+                'sent_acc': validation_epoch_sentence_accuracy, 
+                'wer': validation_epoch_wer, 
+                'sym_acc': validation_epoch_symbol_accuracy,
+            }
+            no_inrease = 0
+        else:
+            no_inrease += 1
+    
+    best_score = {' '.join(k.split('_')).title(): v for k, v in best_score.items()}
+    print(f"\nBEST MODEL:\n{best_score}")
 
 
 if __name__ == "__main__":
@@ -490,5 +552,7 @@ if __name__ == "__main__":
         type=str,
         help="Path of configuration file",
     )
+    parser.add_argument("--cpu", action="store_true")
+    
     parser = parser.parse_args()
-    main(parser.config_file)
+    main(parser.config_file, parser.cpu)
