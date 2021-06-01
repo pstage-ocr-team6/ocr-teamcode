@@ -458,8 +458,8 @@ def main(config_file, on_cpu):
             "id_to_token": train_data_loader.dataset.id_to_token,
             "best_score": best_score,
         }
-        
-        # update best score
+                
+        # update best score & save checkpoint
         if validation_epoch_score > best_score['score']:
             best_score = {
                 'epoch': start_epoch + epoch + 1, 
@@ -468,13 +468,12 @@ def main(config_file, on_cpu):
                 'wer': validation_epoch_wer, 
                 'sym_acc': validation_epoch_symbol_accuracy,
             }
-            no_increase = 0
-        else:
-            no_increase += 1
-
-        # Save checkpoint
-        if not options.save_best_only or validation_epoch_score > best_score['score']:
             save_checkpoint(checkpoint_log, prefix=options.prefix)
+            no_inrease = 0
+        else:
+            if not options.save_best_only:
+                save_checkpoint(checkpoint_log, prefix=options.prefix)
+            no_inrease += 1
             
         if options.wandb.wandb:
             wandb_log = {}
