@@ -340,15 +340,18 @@ def main(config_file, on_cpu):
     learning_rates = checkpoint["lr"]
     grad_norms = checkpoint["grad_norm"]
 
-    # Best score
+    # Load or initialize best score
     if options.checkpoint:
-        best_score = {
-            'epoch': start_epoch, 
-            'score': validation_score[-1], 
-            'sentence_accuracy': validation_sentence_accuracy[-1], 
-            'wer': validation_wer[-1], 
-            'symbol_accuracy': validation_symbol_accuracy[-1],
-        }
+        if checkpoint.get("best_score") is not None:
+            best_score = checkpoint["best_score"]
+        else:
+            best_score = {
+                'epoch': start_epoch, 
+                'score': validation_score[-1], 
+                'sentence_accuracy': validation_sentence_accuracy[-1], 
+                'wer': validation_wer[-1], 
+                'symbol_accuracy': validation_symbol_accuracy[-1],
+            }
     else:
         best_score = {
             'epoch': 0, 
