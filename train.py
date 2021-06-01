@@ -447,36 +447,38 @@ def main(config_file, on_cpu):
             no_inrease = 0
         else:
             no_inrease += 1
+        
+        # things to save
+        checkpoint_log = {
+            "epoch": start_epoch + epoch + 1,
+            "train_losses": train_losses,
+            "train_symbol_accuracy": train_symbol_accuracy,
+            "train_sentence_accuracy": train_sentence_accuracy,
+            "train_wer": train_wer,
+            "train_score": train_score,
+            "validation_losses": validation_losses,
+            "validation_symbol_accuracy": validation_symbol_accuracy,
+            "validation_sentence_accuracy": validation_sentence_accuracy,
+            "validation_wer": validation_wer,
+            "validation_score": validation_score,
+            "lr": epoch_lr,
+            "grad_norm": grad_norms,
+            "model": model.state_dict(),
+            "optimizer": optimizer.state_dict(),
+            "configs": option_dict,
+            "token_to_id": train_data_loader.dataset.token_to_id,
+            "id_to_token": train_data_loader.dataset.id_to_token,
+            "best_score": best_score,
+        }
 
         # Save checkpoint
         if not options.save_best_only or validation_epoch_score > best_score['score']:
             # make config
             with open(config_file, 'r') as f:
                 option_dict = yaml.safe_load(f)
-            # things to save
-            checkpoint_log = {
-                "epoch": start_epoch + epoch + 1,
-                "train_losses": train_losses,
-                "train_symbol_accuracy": train_symbol_accuracy,
-                "train_sentence_accuracy": train_sentence_accuracy,
-                "train_wer": train_wer,
-                "train_score": train_score,
-                "validation_losses": validation_losses,
-                "validation_symbol_accuracy": validation_symbol_accuracy,
-                "validation_sentence_accuracy": validation_sentence_accuracy,
-                "validation_wer": validation_wer,
-                "validation_score": validation_score,
-                "lr": epoch_lr,
-                "grad_norm": grad_norms,
-                "model": model.state_dict(),
-                "optimizer": optimizer.state_dict(),
-                "configs": option_dict,
-                "token_to_id": train_data_loader.dataset.token_to_id,
-                "id_to_token": train_data_loader.dataset.id_to_token,
-                "best_score": best_score,
-            }
 
             save_checkpoint(checkpoint_log, prefix=options.prefix)
+            
         if options.wandb.wandb:
             wandb_log = {}
             # remove useless log
