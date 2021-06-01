@@ -345,12 +345,14 @@ def main(config_file, on_cpu):
         if checkpoint.get("best_score") is not None:
             best_score = checkpoint["best_score"]
         else:
+            best_validation_score = max(validation_score)
+            best_epoch = validation_score.index(best_validation_score)
             best_score = {
-                'epoch': start_epoch, 
-                'score': validation_score[-1], 
-                'sentence_accuracy': validation_sentence_accuracy[-1], 
-                'wer': validation_wer[-1], 
-                'symbol_accuracy': validation_symbol_accuracy[-1],
+                'epoch': best_epoch + 1, 
+                'score': best_validation_score, 
+                'sentence_accuracy': validation_sentence_accuracy[best_epoch], 
+                'wer': validation_wer[best_epoch], 
+                'symbol_accuracy': validation_symbol_accuracy[best_epoch],
             }
     else:
         best_score = {
@@ -562,5 +564,4 @@ if __name__ == "__main__":
     parser.add_argument("--cpu", action="store_true")
     
     parser = parser.parse_args()
-    
     main(parser.config_file, parser.cpu)
