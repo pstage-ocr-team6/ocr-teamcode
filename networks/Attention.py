@@ -7,8 +7,6 @@ import random
 
 from dataset import START, PAD
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
 
 class CNN(nn.Module):
     def __init__(self, nc, leakyRelu=False):
@@ -159,6 +157,8 @@ class AttentionDecoder(nn.Module):
     def forward(
         self, src, text, is_train=True, teacher_forcing_ratio=1.0, batch_max_length=50
     ):
+        device = src.device
+        
         """
         input:
             batch_H : contextual_feature H = hidden state of encoder. [batch_size x num_steps x contextual_feature_channels]

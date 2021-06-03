@@ -166,7 +166,7 @@ def run_epoch(
     return result
 
 
-def main(config_file):
+def main(config_file, on_cpu):
     """
     Train math formula recognition model
     """
@@ -179,6 +179,10 @@ def main(config_file):
         run_name = options.wandb.run_name if options.wandb.run_name else None
         # intialize wandb project
         wandb.init(project=os.getenv('PROJECT'), entity=os.getenv('ENTITY'), config=wandb_config, name=run_name)
+        
+    # make config
+    with open(config_file, 'r') as f:
+        option_dict = yaml.safe_load(f)
 
     # set random seed
     torch.manual_seed(options.seed)
@@ -187,22 +191,29 @@ def main(config_file):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
-    is_cuda = torch.cuda.is_available()
+    is_cuda = torch.cuda.is_available() and not on_cpu
     hardware = "cuda" if is_cuda else "cpu"
     device = torch.device(hardware)
     print("--------------------------------")
     print("Running {} on device {}\n".format(options.network, device))
 
     # Print system environments
-    num_gpus = torch.cuda.device_count()
     num_cpus = os.cpu_count()
     mem_size = virtual_memory().available // (1024 ** 3)
-    print(
-        "[+] System environments\n",
-        "The number of gpus : {}\n".format(num_gpus),
-        "The number of cpus : {}\n".format(num_cpus),
-        "Memory Size : {}G\n".format(mem_size),
-    )
+    if on_cpu:
+        print(
+            "[+] System environments\n",
+            "The number of cpus : {}\n".format(num_cpus),
+            "Memory Size : {}G\n".format(mem_size),
+        )
+    else:
+        num_gpus = torch.cuda.device_count()
+        print(
+            "[+] System environments\n",
+            "The number of gpus : {}\n".format(num_gpus),
+            "The number of cpus : {}\n".format(num_cpus),
+            "Memory Size : {}G\n".format(mem_size),
+        )
 
     # Load checkpoint and print result
     checkpoint = (
@@ -212,6 +223,19 @@ def main(config_file):
     )
     model_checkpoint = checkpoint["model"]
     if model_checkpoint:
+        if checkpoint.get("train_score") is None:
+            checkpoint["train_score"] = [
+                0.9 * acc + 0.1 * wer 
+                for acc, wer 
+                in zip(checkpoint["train_sentence_accuracy"], checkpoint["train_wer"])
+            ]
+        if checkpoint.get("validation_score") is None:
+            checkpoint["validation_score"] = [
+                0.9 * acc + 0.1 * wer 
+                for acc, wer 
+                in zip(checkpoint["validation_sentence_accuracy"], checkpoint["validation_wer"])
+            ]
+            
         print(
             "[+] Checkpoint\n",
             "Resuming from epoch : {}\n".format(checkpoint["epoch"]),
@@ -317,8 +341,35 @@ def main(config_file):
     learning_rates = checkpoint["lr"]
     grad_norms = checkpoint["grad_norm"]
 
+    # Load or initialize best score
+    if options.checkpoint:
+        if checkpoint.get("best_score") is not None:
+            best_score = checkpoint["best_score"]
+        else:
+            best_validation_score = max(validation_score)
+            best_epoch = validation_score.index(best_validation_score)
+            best_score = {
+                'epoch': best_epoch + 1, 
+                'score': best_validation_score, 
+                'sentence_accuracy': validation_sentence_accuracy[best_epoch], 
+                'wer': validation_wer[best_epoch], 
+                'symbol_accuracy': validation_symbol_accuracy[best_epoch],
+            }
+    else:
+        best_score = {
+            'epoch': 0, 
+            'score': 0, 
+            'sentence_accuracy': 0, 
+            'wer': 1e9, 
+            'symbol_accuracy': 0,
+        }
+    no_increase = 0
+    
     # Train
     for epoch in range(options.num_epochs):
+        if options.patience >= 0 and no_increase > options.patience:
+            break
+        
         start_time = time.time()
 
         epoch_text = "[{current:>{pad}}/{end}] Epoch {epoch}".format(
@@ -384,11 +435,7 @@ def main(config_file):
                 (float(validation_epoch_sentence_accuracy) * 0.9) + ((1 - float(validation_epoch_wer)) * 0.1)
         )
         validation_score.append(validation_epoch_score)
-
-        # Save checkpoint
-        # make config
-        with open(config_file, 'r') as f:
-            option_dict = yaml.safe_load(f)
+        
         # things to save
         checkpoint_log = {
             "epoch": start_epoch + epoch + 1,
@@ -408,14 +455,30 @@ def main(config_file):
             "optimizer": optimizer.state_dict(),
             "configs": option_dict,
             "token_to_id": train_data_loader.dataset.token_to_id,
-            "id_to_token": train_data_loader.dataset.id_to_token
+            "id_to_token": train_data_loader.dataset.id_to_token,
+            "best_score": best_score,
         }
-
-        save_checkpoint(checkpoint_log, prefix=options.prefix)
+                
+        # update best score & save checkpoint
+        if validation_epoch_score > best_score['score']:
+            best_score = {
+                'epoch': start_epoch + epoch + 1, 
+                'score': validation_epoch_score, 
+                'sent_acc': validation_epoch_sentence_accuracy, 
+                'wer': validation_epoch_wer, 
+                'sym_acc': validation_epoch_symbol_accuracy,
+            }
+            save_checkpoint(checkpoint_log, prefix=options.prefix)
+            no_inrease = 0
+        else:
+            if not options.save_best_only:
+                save_checkpoint(checkpoint_log, prefix=options.prefix)
+            no_inrease += 1
+            
         if options.wandb.wandb:
             wandb_log = {}
             # remove useless log
-            removed_keys = ['model', 'optimizer', 'configs', 'epoch', 'token_to_id', 'id_to_token']
+            removed_keys = ['model', 'optimizer', 'configs', 'epoch', 'token_to_id', 'id_to_token', 'best_score']
             for key in removed_keys:
                 del checkpoint_log[key]
             # convert key-value datatype to int
@@ -443,6 +506,7 @@ def main(config_file):
                 "Validation WER = {validation_wer:.5f}, "
                 "Validation Score = {validation_score:.5f}, "
                 "Validation Loss = {validation_loss:.5f}, "
+                "Best Model Epoch = {best_epoch}, "
                 "lr = {lr} "
                 "(time elapsed {time})"
             ).format(
@@ -457,6 +521,7 @@ def main(config_file):
                 validation_wer=validation_epoch_wer,
                 validation_score=validation_epoch_score,
                 validation_loss=validation_result["loss"],
+                best_epoch=best_score["epoch"],
                 lr=epoch_lr,
                 time=elapsed_time,
             )
@@ -478,6 +543,10 @@ def main(config_file):
                 validation_epoch_score,
                 model,
             )
+        
+    
+    best_score = {' '.join(k.split('_')).title(): v for k, v in best_score.items()}
+    print(f"\nBEST MODEL:\n{best_score}")
 
 
 if __name__ == "__main__":
@@ -490,5 +559,7 @@ if __name__ == "__main__":
         type=str,
         help="Path of configuration file",
     )
+    parser.add_argument("--cpu", action="store_true")
+    
     parser = parser.parse_args()
-    main(parser.config_file)
+    main(parser.config_file, parser.cpu)

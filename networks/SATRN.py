@@ -7,8 +7,6 @@ import random
 
 from dataset import START, PAD
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
 
 class BottleneckBlock(nn.Module):
     """
@@ -299,12 +297,12 @@ class PositionalEncoding2D(nn.Module):
         ### Require DEBUG
         b, c, h, w = input.size()
         h_pos_encoding = (
-            self.h_position_encoder[:h, :].unsqueeze(1).to(input.get_device())
+            self.h_position_encoder[:h, :].unsqueeze(1).to(input.device)
         )
         h_pos_encoding = self.h_linear(h_pos_encoding)  # [H, 1, D]
 
         w_pos_encoding = (
-            self.w_position_encoder[:w, :].unsqueeze(0).to(input.get_device())
+            self.w_position_encoder[:w, :].unsqueeze(0).to(input.device)
         )
         w_pos_encoding = self.w_linear(w_pos_encoding)  # [1, W, D]
 
@@ -442,10 +440,10 @@ class PositionEncoder1D(nn.Module):
 
     def forward(self, x, point=-1):
         if point == -1:
-            out = x + self.position_encoder[:, : x.size(1), :].to(x.get_device())
+            out = x + self.position_encoder[:, : x.size(1), :].to(x.device)
             out = self.dropout(out)
         else:
-            out = x + self.position_encoder[:, point, :].unsqueeze(1).to(x.get_device())
+            out = x + self.position_encoder[:, point, :].unsqueeze(1).to(x.device)
         return out
 
 
@@ -500,7 +498,7 @@ class TransformerDecoder(nn.Module):
 
     def order_mask(self, length):
         order_mask = torch.triu(torch.ones(length, length), diagonal=1).bool()
-        order_mask = order_mask.unsqueeze(0).to(device)
+        order_mask = order_mask.unsqueeze(0)
         return order_mask
 
     def text_embedding(self, texts):
@@ -512,11 +510,12 @@ class TransformerDecoder(nn.Module):
     def forward(
         self, src, text, is_train=True, batch_max_length=50, teacher_forcing_ratio=1.0
     ):
+        device = src.device
 
         if is_train and random.random() < teacher_forcing_ratio:
             tgt = self.text_embedding(text)
             tgt = self.pos_encoder(tgt)
-            tgt_mask = self.pad_mask(text) | self.order_mask(text.size(1))
+            tgt_mask = self.pad_mask(text) | self.order_mask(text.size(1)).to(device)
             for layer in self.attention_layers:
                 tgt = layer(tgt, None, src, tgt_mask)
             out = self.generator(tgt)
@@ -530,7 +529,7 @@ class TransformerDecoder(nn.Module):
                 target = target.unsqueeze(1)
                 tgt = self.text_embedding(target)
                 tgt = self.pos_encoder(tgt, point=t)
-                tgt_mask = self.order_mask(t + 1)
+                tgt_mask = self.order_mask(t + 1).to(device)
                 tgt_mask = tgt_mask[:, -1].unsqueeze(1)  # [1, (l+1)]
                 for l, layer in enumerate(self.attention_layers):
                     tgt = layer(tgt, features[l], src, tgt_mask)
@@ -540,7 +539,7 @@ class TransformerDecoder(nn.Module):
 
                 _out = self.generator(tgt)  # [b, 1, c]
                 target = torch.argmax(_out[:, -1:, :], dim=-1)  # [b, 1]
-                target = target.squeeze()   # [b]
+                target = target.squeeze(1)   # [b]
                 out.append(_out)
             
             out = torch.stack(out, dim=1).to(device)    # [b, max length, 1, class length]
