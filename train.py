@@ -27,7 +27,7 @@ from utils import get_network, get_optimizer, get_wandb_config
 from dataset import dataset_loader, START, PAD, load_vocab
 from scheduler import CircularLRBeta
 
-from metrics import word_error_rate, sentence_acc
+from metrics import word_error_rate, sentence_acc, get_worst_wer_img_path
 
 # load env file
 load_dotenv(verbose=True)
@@ -68,6 +68,7 @@ def run_epoch(
     max_grad_norm,
     device,
     train=True,
+    vis_wandb=True,
 ):
     # Disables autograd during validation mode
     torch.set_grad_enabled(train)
@@ -84,6 +85,7 @@ def run_epoch(
     num_wer = 0
     sent_acc = 0
     num_sent_acc = 0
+    high_wer_imgs = []
 
     with tqdm(
         desc="{} ({})".format(epoch_text, "Train" if train else "Validation"),
@@ -139,7 +141,16 @@ def run_epoch(
             correct_symbols += torch.sum(sequence == expected[:, 1:], dim=(0, 1)).item()
             total_symbols += torch.sum(expected[:, 1:] != -1, dim=(0, 1)).item()
 
+            if not train and vis_wandb:
+                max_wer_img_path, max_wer, gt_txt, pred_txt = get_worst_wer_img_path(d['path'], sequence_str, expected_str)
+                high_wer_imgs.append(wandb.Image(
+                    max_wer_img_path,
+                    caption="Img: {}, WER: {:.4f} \n GT: {} \n Pred: {}".format(max_wer_img_path[-9:], max_wer, gt_txt, pred_txt)))
+
             pbar.update(curr_batch_size)
+
+    if not train and vis_wandb:
+        wandb.log({"high_wer_imgs": high_wer_imgs})
 
     expected = id_to_string(expected, data_loader)
     sequence = id_to_string(sequence, data_loader)
@@ -418,6 +429,7 @@ def main(config_file, on_cpu):
             options.max_grad_norm,
             device,
             train=False,
+            vis_wandb=True,
         )
         validation_losses.append(validation_result["loss"])
         validation_epoch_symbol_accuracy = (validation_result["correct_symbols"] / validation_result["total_symbols"])
