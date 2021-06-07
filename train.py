@@ -28,7 +28,10 @@ from dataset import dataset_loader, START, PAD, load_vocab
 from scheduler import CircularLRBeta
 
 from metrics import word_error_rate, sentence_acc, get_worst_wer_img_path
+from custom_augment import to_binary
 
+import warnings
+warnings.filterwarnings(action='ignore')
 # load env file
 load_dotenv(verbose=True)
 
@@ -266,6 +269,7 @@ def main(config_file, on_cpu):
     transformed = transforms.Compose(
         [
             # Resize so all images have the same size
+            to_binary(),  ### augment
             transforms.Resize((options.input_size.height, options.input_size.width)),
             transforms.ToTensor(),
         ]
