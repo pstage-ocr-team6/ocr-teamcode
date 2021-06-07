@@ -47,6 +47,8 @@ def id_to_string(tokens, data_loader, do_eval=0):
                 if token not in special_ids:
                     if token != -1:
                         string += data_loader.dataset.id_to_token[token] + " "
+                elif token == data_loader.dataset.token_to_id["<EOS>"]:
+                    break
         else:
             for token in example:
                 token = token.item()
