@@ -3,6 +3,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 import imutils
 def img_equal_clahe_yuv(img):
+    ''' yuv 채널을 이용해 equalize, clahe를 적용합니다.
+        input : 3채널 이미지
+
+        output : 균등화된 이미지(equalize image), clahe 적용된 이미지 
+    '''
     img_yuv=cv2.cvtColor(img,cv2.COLOR_BGR2YUV)
 
     img_eq=img_yuv.copy()
@@ -17,11 +22,19 @@ def img_equal_clahe_yuv(img):
     return img_eq,img_clahe
 
 def img_normalize(img):
+    ''' 이미지를 normalize 합니다.
+        input : 3채널 이미지
+        output : normalized image
+    '''
     img_gray=cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     img_norm = cv2.normalize(img_gray, None, 0, 255, cv2.NORM_MINMAX)
     return img_norm
 
 def show_hist(img):
+    ''' 이미지의 histogram을 보여줍니다.
+        input : gray 이미지
+        output : None
+    '''
     hist,bins = np.histogram(img.flatten(),256,[0,256])
     plt.hist(img.flatten(),256,[0,256], color = 'r')
     plt.xlim([0,256])
@@ -29,6 +42,11 @@ def show_hist(img):
     plt.figure()
 
 def img_clahe_luminus(img):
+    ''' lab 채널을 이용해 equalize, clahe를 적용합니다.
+        input : 3채널 이미지
+
+        output : 균등화된 이미지(equalize image), clahe 적용된 이미지 
+    '''
     lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)  # luminosity(명도)채널을 얻기 위해 채널을 BGR->LAB 로 바꿈
     l, a, b = cv2.split(lab) # 채널 분리
 
@@ -43,6 +61,10 @@ def img_clahe_luminus(img):
     return img_eq,img_clahe
 
 def remove_line(gray):
+    ''' 가로가 긴(width의 절반 이상)
+        input : gray 이미지
+        output : 긴 선이 제거된 binary 이미지
+    '''
     h,w=gray.shape[:2] # h, w
     # gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)  # gray 채널
     thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]  #OTSU 방법을 이용해 binary 이미지 변환
@@ -69,53 +91,49 @@ def remove_line(gray):
     repair_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1,(temp_height//10)+1))
     result = cv2.morphologyEx(dilation_image, cv2.MORPH_CLOSE, repair_kernel, iterations=2)
     return 255-result
-def global_threshold(gray):
-    h,w=gray.shape[:2] # h, w
-    if h*w>1000*100:
-        gray=cv2.resize(gray, dsize=(0, 0), fx=0.3, fy=0.3, interpolation=cv2.INTER_LINEAR)
-        
-    blurred = cv2.GaussianBlur(gray, (11,11), 1)
-    thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]  #OTSU 방법을 이용해 binary 이미지 변환
-    kernel =  cv2.getStructuringElement(cv2.MORPH_RECT, (3,3))
-    opening = cv2.morphologyEx(255-thresh, cv2.MORPH_OPEN, kernel)
-    return opening
 
 def global_threshold1(gray):
+    
+    ''' global threshold를 사용해 binary 이미지
+        input : gray 이미지
+        output : return 되는 binary 이미지와 같은 크기의 gray image, binary 이미지
+    '''
     h,w=gray.shape[:2] # h, w
-    # if h*w>1000*100:
-    #     gray=cv2.resize(gray, dsize=(0, 0), fx=0.3, fy=0.3, interpolation=cv2.INTER_LINEAR)
-    if w>1000 and h>100:
+    if w>1000 and h>100: # 가로 세로가 일정 수치 보다 크면 30%씩 줄임
         gray=cv2.resize(gray, dsize=(0, 0), fx=0.3, fy=0.3, interpolation=cv2.INTER_LINEAR)
-    blurred = cv2.GaussianBlur(gray, (11,11), 1)
+    blurred = cv2.GaussianBlur(gray, (11,11), 1) # 가우시안 블러 적용
     thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]  #OTSU 방법을 이용해 binary 이미지 변환
-    kernel =  cv2.getStructuringElement(cv2.MORPH_RECT, (3,3))
-    opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
-    closing = cv2.morphologyEx(opening, cv2.MORPH_CLOSE, kernel)
-    kernel = np.ones((3, 3), np.uint8)
-    dilate_image = cv2.erode(closing, kernel, iterations=1)
+    kernel =  cv2.getStructuringElement(cv2.MORPH_RECT, (3,3)) # 사각형 모양의 커널을 만듬
+    opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel) # 모포로지 open
+    closing = cv2.morphologyEx(opening, cv2.MORPH_CLOSE, kernel) # 모포로지 close
     return gray,255-closing
 
 def remove_brightness(gray):
+    ''' 밝기 편차가 심한 이미지들을 binary 이미로 만들기
+        input : gray 이미지
+        output : return 되는 binary 이미지와 같은 크기의 gray image, binary 이미지
+    '''
     h,w=gray.shape[:2]
-    if w>1000 and h>100:
+    if w>1000 and h>100: # 가로 세로가 일정 수치 보다 크면 30%씩 줄임
         gray=cv2.resize(gray, dsize=(0, 0), fx=0.3, fy=0.3, interpolation=cv2.INTER_LINEAR)
-    blurred = cv2.GaussianBlur(gray, (11,11), 1)
-    thresh=cv2.adaptiveThreshold(blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+    blurred = cv2.GaussianBlur(gray, (11,11), 1)  # 가우시안 블러 적용
+    thresh=cv2.adaptiveThreshold(blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, # adaptiveThreshold를 이용해 binary 이미지 만들기
                                     cv2.THRESH_BINARY, 15,2)
-    kernel = np.ones((3, 3), np.uint8)
-    kernel =  cv2.getStructuringElement(cv2.MORPH_RECT, (3,3))
-    opening = cv2.morphologyEx(255-thresh, cv2.MORPH_OPEN, kernel)
-    repair_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1,5))
-    result = cv2.morphologyEx(opening, cv2.MORPH_CLOSE, repair_kernel, iterations=1)
-    kernel = np.ones((1, 5), np.uint8)
-    dilate_image = cv2.dilate(result, kernel, iterations=1)
+
+    kernel =  cv2.getStructuringElement(cv2.MORPH_RECT, (3,3)) # 사각형 모양의 커널을 만듬
+    opening = cv2.morphologyEx(255-thresh, cv2.MORPH_OPEN, kernel) # 모포로지 open
+    repair_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1,5)) # 모포로지 close를 위한 커널
+    result = cv2.morphologyEx(opening, cv2.MORPH_CLOSE, repair_kernel, iterations=1) # 모포로지 close
     return gray,255-result
     
 def show_x_y_hist(img):
+    ''' x,y방향으로 이미지 평균을 보여줍니다.
+        input : 3채널 이미지
+        output : None
+    '''
     gray=cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     h,w=gray.shape[:2]
     temp=[]
-    white_img=255+np.zeros_like(gray)
     for i in range(w):
         temp.append(gray[:,i].mean())
     plt.title('x')
@@ -152,20 +170,24 @@ def sliding_window(image, stepSize, windowSize):
 
 
 def sliding_window1(gray):
+    ''' sliding window 방식으로 이미지 밝기 편차를 확인 합니다.
+        input : gray 이미지
+        output: 이미지의 부분 마다의 밝기 max, min
+    '''
     h,w=gray.shape[:2]
-    (w_width, w_height) = (w//3, h//3)
-    dead_line=min(w//10,h//10)
+    (w_width, w_height) = (w//3, h//3) # sliding_window 크기
+    dead_line=min(w//10,h//10) # sliding_window의 종료 지점
     _max=0
     _min=np.inf
-    for x in range(0, gray.shape[1]-dead_line , w//5):
-        for y in range(0, gray.shape[0]-dead_line , h//5):
-            t_x,t_y=x + w_width,y + w_height
+    for x in range(0, gray.shape[1]-dead_line , w//5): # sliding window는 w//5의 크기 만큼 움직임
+        for y in range(0, gray.shape[0]-dead_line , h//5): # sliding window는 h//5의 크기 만큼 움직임
+            t_x,t_y=x + w_width,y + w_height # sliding window의 다음 지점
             if x + w_width>gray.shape[1]:
                 t_x=gray.shape[1]
             if y + w_height>gray.shape[0]:
                 t_y=gray.shape[0]
-            window = gray[x:t_x, y:t_y]
-            _mean=window.mean()
+            window = gray[x:t_x, y:t_y] # 현재 window
+            _mean=window.mean() # 현재 window의 평균 밝기 값
             if _max <_mean:
                 _max=_mean
             if _min > _mean:
@@ -173,6 +195,11 @@ def sliding_window1(gray):
     return _max,_min
 
 def sliding_window2(gray):
+    
+    ''' sliding window 방식으로 이미지 밝기 편차를 확인 합니다. 한 sliding window가 끝나면  window 사이즈가 1.5배 증가하고 다시 sliding_windwo를 합니다.
+        input : gray 이미지
+        output: 이미지의 부분 마다의 밝기 max, min
+    '''
     h,w=gray.shape[:2]
     _max=0
     _min=np.inf
