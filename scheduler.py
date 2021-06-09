@@ -1,3 +1,6 @@
+import math
+from torch.optim.lr_scheduler import _LRScheduler
+
 
 class CircularLRBeta:
 
@@ -62,3 +65,83 @@ class CircularLRBeta:
                 group['betas'] = (momentum, group['betas'][1])
 
         return lr
+    
+
+class CosineAnnealingWithWarmupAndHardRestart(_LRScheduler):
+    def __init__(
+        self, optimizer, warmup_steps, cycle_steps, max_lr, min_lr=None,
+    ):
+        self.optimizer = optimizer
+        self.warmup_steps = warmup_steps
+        self.cycle_steps = cycle_steps
+        self.max_lr = max_lr
+        self.min_lr = min_lr if min_lr is not None else max_lr / 50
+
+        super(CosineAnnealingWithWarmupAndHardRestart, self).__init__(optimizer=optimizer)
+        
+        self.init_lr()
+        
+    def init_lr(self):
+        self.lrs = []
+        for param_group in self.optimizer.param_groups:
+            param_group['lr'] = self.min_lr
+            self.lrs.append(self.min_lr)
+
+    def get_lr(self):
+        if self._step_count < self.warmup_steps:
+            return (
+                self.min_lr + 
+                (self.max_lr - self.min_lr) / self.warmup_steps * self._step_count
+            )
+        else:
+            x = (self._step_count - self.warmup_steps) % self.cycle_steps
+            return (
+                self.min_lr + 
+                0.5 * (self.max_lr - self.min_lr) * (1 + math.cos(math.pi / self.cycle_steps * x))
+            )
+
+    def step(self):
+        self.lr = self.get_lr()
+        for param_group in self.optimizer.param_groups:
+            param_group['lr'] = self.lr
+        self._step_count += 1
+
+        
+class CosineDecayWithWarmup(_LRScheduler):
+    def __init__(
+        self, optimizer, warmup_steps, total_steps, max_lr, min_lr=None,
+    ):
+        self.optimizer = optimizer
+        self.warmup_steps = warmup_steps
+        self.total_steps = total_steps
+        self.max_lr = max_lr
+        self.min_lr = min_lr if min_lr is not None else max_lr / 50
+
+        super(CosineDecayWithWarmup, self).__init__(optimizer=optimizer)
+        
+        self.init_lr()
+        
+    def init_lr(self):
+        for param_group in self.optimizer.param_groups:
+            param_group['lr'] = self.min_lr
+
+    def get_lr(self):
+        if self._step_count < self.warmup_steps:
+            return (
+                self.min_lr + 
+                (self.max_lr - self.min_lr) / self.warmup_steps * self._step_count
+            )
+        else:
+            x = self._step_count - self.warmup_steps
+            return (
+                self.min_lr + 
+                (self.max_lr - self.min_lr) / 2 * 
+                (1 + math.cos((self._step_count - self.warmup_steps) / (self.total_steps - self.warmup_steps) * math.pi))
+            )
+
+    def step(self):
+        self.lr = self.get_lr()
+        for param_group in self.optimizer.param_groups:
+            param_group['lr'] = self.lr
+        self._step_count += 1
+        
