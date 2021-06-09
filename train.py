@@ -8,7 +8,6 @@ import shutil
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.cuda.amp import autocast, GradScaler
 from torchvision import transforms
 import yaml
 import wandb
@@ -70,7 +69,6 @@ def run_epoch(
     teacher_forcing_ratio,
     max_grad_norm,
     device,
-    scaler=None,
     train=True,
     vis_wandb=True,
 ):
@@ -80,15 +78,6 @@ def run_epoch(
         model.train()
     else:
         model.eval()
-        
-    def _infer(input, expected):
-        output = model(input, expected, train, teacher_forcing_ratio)
-        decoded_values = output.transpose(1, 2)
-        _, sequence = torch.topk(decoded_values, 1, dim=1)
-        sequence = sequence.squeeze(1)
-
-        loss = criterion(decoded_values, expected[:, 1:])
-        return loss, sequence
 
     losses = []
     grad_norms = []
@@ -115,12 +104,14 @@ def run_epoch(
 
             # Replace -1 with the PAD token
             expected[expected == -1] = data_loader.dataset.token_to_id[PAD]
-            
-            if scaler is not None:
-                with autocast():
-                    loss, sequence = _infer(input, expected)
-            else:
-                loss, sequence = _infer(input, expected)
+
+            output = model(input, expected, train, teacher_forcing_ratio)
+
+            decoded_values = output.transpose(1, 2)
+            _, sequence = torch.topk(decoded_values, 1, dim=1)
+            sequence = sequence.squeeze(1)
+
+            loss = criterion(decoded_values, expected[:, 1:])
 
             if train:
                 optim_params = [
@@ -128,31 +119,17 @@ def run_epoch(
                     for param_group in optimizer.param_groups
                     for p in param_group["params"]
                 ]
-                if scaler is not None:
-                    # accumulates scaled gradients
-                    scaler.scale(loss).backward()
-                    
-                    # clip gradients, it returns the total norm of all parameters
-                    # unscale for gradient clipping
-                    scaler.unscale_(optimizer)
-                    grad_norm = nn.utils.clip_grad_norm_(
-                        optim_params, max_norm=max_grad_norm
-                    )
-                    grad_norms.append(grad_norm)
-                    
-                    scaler.step(optimizer)
-                    
-                    # update scaler for next iteration
-                    scaler.update()
-                else:
-                    loss.backward()
-                    grad_norm = nn.utils.clip_grad_norm_(
-                        optim_params, max_norm=max_grad_norm
-                    )
-                    grad_norms.append(grad_norm)
-                    optimizer.step()
-                
+                optimizer.zero_grad()
+                loss.backward()
+                # Clip gradients, it returns the total norm of all parameters
+                grad_norm = nn.utils.clip_grad_norm_(
+                    optim_params, max_norm=max_grad_norm
+                )
+                grad_norms.append(grad_norm)
+
+                # cycle
                 lr_scheduler.step()
+                optimizer.step()
 
             losses.append(loss.item())
 
@@ -311,41 +288,15 @@ def main(config_file, on_cpu):
         device,
         train_dataset,
     )
+    model.train()
     criterion = model.criterion.to(device)
-
-    # Get optimizer
     enc_params_to_optimise = [
         param for param in model.encoder.parameters() if param.requires_grad
     ]
     dec_params_to_optimise = [
         param for param in model.decoder.parameters() if param.requires_grad
     ]
-    if options.optimizer.selective_weight_decay:
-        no_decay_keywords = ['bias', 'norm.weight']
-        params_to_optimise = [
-            {
-                'params': [param for name, param in model.named_parameters()
-                        if param.requires_grad and not any(nd in name for nd in no_decay_keywords)],
-                'weight_decay': options.optimizer.weight_decay,
-            },
-            {
-                'params': [param for name, param in model.named_parameters()
-                        if param.requires_grad and any(nd in name for nd in no_decay_keywords)],
-                'weight_decay': 0.0,
-            }
-        ]
-        optimizer = getattr(torch.optim, options.optimizer.optimizer)(
-            params_to_optimise, lr=options.optimizer.lr,
-        )
-    else:
-        params_to_optimise = [*enc_params_to_optimise, *dec_params_to_optimise]
-        optimizer = get_optimizer(
-            options.optimizer.optimizer,
-            params_to_optimise,
-            lr=options.optimizer.lr,
-            weight_decay=options.optimizer.weight_decay,
-        )
-        
+    params_to_optimise = [*enc_params_to_optimise, *dec_params_to_optimise]
     print(
         "[+] Network\n",
         "Type: {}\n".format(options.network),
@@ -356,15 +307,19 @@ def main(config_file, on_cpu):
             sum(p.numel() for p in dec_params_to_optimise),
         ),
     )
-        
-    # load state dict to optimizer if needed
+
+    # Get optimizer
+    optimizer = get_optimizer(
+        options.optimizer.optimizer,
+        params_to_optimise,
+        lr=options.optimizer.lr,
+        weight_decay=options.optimizer.weight_decay,
+    )
     optimizer_state = checkpoint.get("optimizer")
     if optimizer_state:
         optimizer.load_state_dict(optimizer_state)
     for param_group in optimizer.param_groups:
         param_group["initial_lr"] = options.optimizer.lr
-        
-    # learning rate scheduler
     if options.optimizer.is_cycle:
         cycle = len(train_data_loader) * options.num_epochs
         lr_scheduler = CircularLRBeta(
@@ -376,9 +331,6 @@ def main(config_file, on_cpu):
             step_size=options.optimizer.lr_epochs,
             gamma=options.optimizer.lr_factor,
         )
-        
-    # Scaler for mixed precision
-    scaler = GradScaler() if options.fp16 and not on_cpu else None
 
     # Log
     if not os.path.exists(options.prefix):
@@ -426,9 +378,6 @@ def main(config_file, on_cpu):
         }
     no_increase = 0
     
-    # initial teacher_forcing_ratio
-    teacher_forcing_ratio = options.teacher_forcing_ratio
-    
     # Train
     for epoch in range(options.num_epochs):
         if options.patience >= 0 and no_increase > options.patience:
@@ -442,10 +391,6 @@ def main(config_file, on_cpu):
             epoch=start_epoch + epoch + 1,
             pad=len(str(options.num_epochs)),
         )
-        
-        # linear teacher forcing scheduling
-        if options.teacher_forcing_damp > 0 and teacher_forcing_ratio > 0:
-            teacher_forcing_ratio = max(teacher_forcing_ratio - options.teacher_forcing_damp, 0)
 
         # Train
         train_result = run_epoch(
@@ -458,7 +403,6 @@ def main(config_file, on_cpu):
             options.teacher_forcing_ratio,
             options.max_grad_norm,
             device,
-            scaler=scaler,
             train=True,
         )
 
@@ -486,7 +430,6 @@ def main(config_file, on_cpu):
             options.teacher_forcing_ratio,
             options.max_grad_norm,
             device,
-            scaler=scaler,
             train=False,
             vis_wandb=True,
         )
@@ -508,8 +451,6 @@ def main(config_file, on_cpu):
         validation_score.append(validation_epoch_score)
         
         # things to save
-        elapsed_time = time.time() - start_time
-        elapsed_time_str = time.strftime("%H:%M:%S", time.gmtime(elapsed_time))
         checkpoint_log = {
             "epoch": start_epoch + epoch + 1,
             "train_losses": train_losses,
@@ -523,7 +464,6 @@ def main(config_file, on_cpu):
             "validation_wer": validation_wer,
             "validation_score": validation_score,
             "lr": epoch_lr,
-            "elapsed_time": elapsed_time,
             "grad_norm": grad_norms,
             "model": model.state_dict(),
             "optimizer": optimizer.state_dict(),
@@ -565,6 +505,8 @@ def main(config_file, on_cpu):
             wandb.log(wandb_log)
 
         # Summary
+        elapsed_time = time.time() - start_time
+        elapsed_time = time.strftime("%H:%M:%S", time.gmtime(elapsed_time))
         if epoch % options.print_epochs == 0 or epoch == options.num_epochs - 1:
             output_string = (
                 "{epoch_text}: "
@@ -595,7 +537,7 @@ def main(config_file, on_cpu):
                 validation_loss=validation_result["loss"],
                 best_epoch=best_score["epoch"],
                 lr=epoch_lr,
-                time=elapsed_time_str,
+                time=elapsed_time,
             )
             print(output_string)
             log_file.write(output_string + "\n")
