@@ -52,7 +52,6 @@ def id_to_string(tokens, data_loader,do_eval=0):
                     if token != -1:
                         string += data_loader.dataset.id_to_token[token] + " "
                 elif token == data_loader.dataset.token_to_id["<EOS>"]:
-
                     break
         else:
             for token in example:
@@ -117,7 +116,6 @@ def run_epoch(
             # Replace -1 with the PAD token
             expected[expected == -1] = data_loader.dataset.token_to_id[PAD]
 
-            
             if scaler is not None:
                 with autocast():
                     loss, sequence = _infer(input, expected)
@@ -412,6 +410,11 @@ def main(config_file):
             'symbol_accuracy': 0,
         }
     no_increase = 0
+    
+    # initial teacher_forcing_ratio
+    teacher_forcing_ratio = options.teacher_forcing_ratio
+    
+
     # Train
     for epoch in range(options.num_epochs):
         if options.patience >= 0 and no_increase > options.patience:
@@ -542,9 +545,6 @@ def main(config_file):
             # save log in wandb
             wandb.log(wandb_log)
 
-=======
-        # Summary
->>>>>>> main
         if epoch % options.print_epochs == 0 or epoch == options.num_epochs - 1:
             output_string = (
                 "{epoch_text}: "
