@@ -24,23 +24,23 @@ from psutil import virtual_memory
 
 from flags import Flags
 from utils import get_network, get_optimizer, get_wandb_config
-from dataset import dataset_loader, START, PAD, load_vocab
+from dataset import dataset_loader, START, PAD,load_vocab
 from scheduler import CircularLRBeta
 
-from metrics import word_error_rate, sentence_acc, get_worst_wer_img_path
-from custom_augment import to_binary
+from metrics import word_error_rate,sentence_acc
+from custom_augment import *
 
 import warnings
 warnings.filterwarnings(action='ignore')
 # load env file
 load_dotenv(verbose=True)
 
-
-def id_to_string(tokens, data_loader, do_eval=0):
+def id_to_string(tokens, data_loader,do_eval=0):
     result = []
     if do_eval:
-        special_ids = [data_loader.dataset.token_to_id["<PAD>"], data_loader.dataset.token_to_id["<SOS>"],
-                       data_loader.dataset.token_to_id["<EOS>"]]
+        eos_id =data_loader.dataset.token_to_id["<EOS>"]
+        special_ids = set([data_loader.dataset.token_to_id["<PAD>"], data_loader.dataset.token_to_id["<SOS>"],
+                       eos_id])
 
     for example in tokens:
         string = ""
@@ -50,6 +50,8 @@ def id_to_string(tokens, data_loader, do_eval=0):
                 if token not in special_ids:
                     if token != -1:
                         string += data_loader.dataset.id_to_token[token] + " "
+                elif token == eos_id:
+                    break
         else:
             for token in example:
                 token = token.item()
@@ -58,7 +60,6 @@ def id_to_string(tokens, data_loader, do_eval=0):
 
         result.append(string)
     return result
-
 
 def run_epoch(
     data_loader,
@@ -71,7 +72,6 @@ def run_epoch(
     max_grad_norm,
     device,
     train=True,
-    vis_wandb=True,
 ):
     # Disables autograd during validation mode
     torch.set_grad_enabled(train)
@@ -84,11 +84,10 @@ def run_epoch(
     grad_norms = []
     correct_symbols = 0
     total_symbols = 0
-    wer = 0
-    num_wer = 0
-    sent_acc = 0
-    num_sent_acc = 0
-    high_wer_imgs = []
+    wer=0
+    num_wer=0
+    sent_acc=0
+    num_sent_acc=0
 
     with tqdm(
         desc="{} ({})".format(epoch_text, "Train" if train else "Validation"),
@@ -107,11 +106,11 @@ def run_epoch(
             expected[expected == -1] = data_loader.dataset.token_to_id[PAD]
 
             output = model(input, expected, train, teacher_forcing_ratio)
-
+            
             decoded_values = output.transpose(1, 2)
             _, sequence = torch.topk(decoded_values, 1, dim=1)
             sequence = sequence.squeeze(1)
-
+            
             loss = criterion(decoded_values, expected[:, 1:])
 
             if train:
@@ -129,31 +128,22 @@ def run_epoch(
                 grad_norms.append(grad_norm)
 
                 # cycle
-                lr_scheduler.step()
                 optimizer.step()
+                lr_scheduler.step()
 
             losses.append(loss.item())
-
+            
             expected[expected == data_loader.dataset.token_to_id[PAD]] = -1
-            expected_str = id_to_string(expected, data_loader, do_eval=1)
-            sequence_str = id_to_string(sequence, data_loader, do_eval=1)
-            wer += word_error_rate(sequence_str, expected_str)
+            expected_str = id_to_string(expected, data_loader,do_eval=1)
+            sequence_str = id_to_string(sequence, data_loader,do_eval=1)
+            wer += word_error_rate(sequence_str,expected_str)
             num_wer += 1
-            sent_acc += sentence_acc(sequence_str, expected_str)
+            sent_acc += sentence_acc(sequence_str,expected_str)
             num_sent_acc += 1
             correct_symbols += torch.sum(sequence == expected[:, 1:], dim=(0, 1)).item()
             total_symbols += torch.sum(expected[:, 1:] != -1, dim=(0, 1)).item()
 
-            if not train and vis_wandb:
-                max_wer_img_path, max_wer, gt_txt, pred_txt = get_worst_wer_img_path(d['path'], sequence_str, expected_str)
-                high_wer_imgs.append(wandb.Image(
-                    max_wer_img_path,
-                    caption="Img: {}, WER: {:.4f} \n GT: {} \n Pred: {}".format(max_wer_img_path[-9:], max_wer, gt_txt, pred_txt)))
-
             pbar.update(curr_batch_size)
-
-    if not train and vis_wandb:
-        wandb.log({"high_wer_imgs": high_wer_imgs})
 
     expected = id_to_string(expected, data_loader)
     sequence = id_to_string(sequence, data_loader)
@@ -167,9 +157,9 @@ def run_epoch(
         "correct_symbols": correct_symbols,
         "total_symbols": total_symbols,
         "wer": wer,
-        "num_wer": num_wer,
+        "num_wer":num_wer,
         "sent_acc": sent_acc,
-        "num_sent_acc": num_sent_acc
+        "num_sent_acc":num_sent_acc
     }
     if train:
         try:
@@ -180,23 +170,20 @@ def run_epoch(
     return result
 
 
-def main(config_file, on_cpu):
+def main(config_file):
     """
     Train math formula recognition model
     """
     options = Flags(config_file).get()
-
+    print(options)
+    # exit()
     if options.wandb.wandb:
         # yaml to dict
         wandb_config = get_wandb_config(config_file)
         # write run name
         run_name = options.wandb.run_name if options.wandb.run_name else None
         # intialize wandb project
-        wandb.init(project=os.getenv('PROJECT'), entity=os.getenv('ENTITY'), config=wandb_config, name=run_name)
-        
-    # make config
-    with open(config_file, 'r') as f:
-        option_dict = yaml.safe_load(f)
+        wandb.init(project='p-4', entity='opijae', config=wandb_config, name=run_name)
 
     # set random seed
     torch.manual_seed(options.seed)
@@ -205,29 +192,22 @@ def main(config_file, on_cpu):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
-    is_cuda = torch.cuda.is_available() and not on_cpu
+    is_cuda = torch.cuda.is_available()
     hardware = "cuda" if is_cuda else "cpu"
     device = torch.device(hardware)
     print("--------------------------------")
     print("Running {} on device {}\n".format(options.network, device))
 
     # Print system environments
+    num_gpus = torch.cuda.device_count()
     num_cpus = os.cpu_count()
     mem_size = virtual_memory().available // (1024 ** 3)
-    if on_cpu:
-        print(
-            "[+] System environments\n",
-            "The number of cpus : {}\n".format(num_cpus),
-            "Memory Size : {}G\n".format(mem_size),
-        )
-    else:
-        num_gpus = torch.cuda.device_count()
-        print(
-            "[+] System environments\n",
-            "The number of gpus : {}\n".format(num_gpus),
-            "The number of cpus : {}\n".format(num_cpus),
-            "Memory Size : {}G\n".format(mem_size),
-        )
+    print(
+        "[+] System environments\n",
+        "The number of gpus : {}\n".format(num_gpus),
+        "The number of cpus : {}\n".format(num_cpus),
+        "Memory Size : {}G\n".format(mem_size),
+    )
 
     # Load checkpoint and print result
     checkpoint = (
@@ -237,19 +217,6 @@ def main(config_file, on_cpu):
     )
     model_checkpoint = checkpoint["model"]
     if model_checkpoint:
-        if checkpoint.get("train_score") is None:
-            checkpoint["train_score"] = [
-                0.9 * acc + 0.1 * wer 
-                for acc, wer 
-                in zip(checkpoint["train_sentence_accuracy"], checkpoint["train_wer"])
-            ]
-        if checkpoint.get("validation_score") is None:
-            checkpoint["validation_score"] = [
-                0.9 * acc + 0.1 * wer 
-                for acc, wer 
-                in zip(checkpoint["validation_sentence_accuracy"], checkpoint["validation_wer"])
-            ]
-            
         print(
             "[+] Checkpoint\n",
             "Resuming from epoch : {}\n".format(checkpoint["epoch"]),
@@ -258,23 +225,38 @@ def main(config_file, on_cpu):
             "Train WER : {:.5f}\n".format(checkpoint["train_wer"][-1]),
             "Train Score : {:.5f}\n".format(checkpoint["train_score"][-1]),
             "Train Loss : {:.5f}\n".format(checkpoint["train_losses"][-1]),
-            "Validation Symbol Accuracy : {:.5f}\n".format(checkpoint["validation_symbol_accuracy"][-1]),
-            "Validation Sentence Accuracy : {:.5f}\n".format(checkpoint["validation_sentence_accuracy"][-1]),
-            "Validation WER : {:.5f}\n".format(checkpoint["validation_wer"][-1]),
+            "Validation Symbol Accuracy : {:.5f}\n".format(
+                checkpoint["validation_symbol_accuracy"][-1]
+            ),
+            "Validation Sentence Accuracy : {:.5f}\n".format(
+                checkpoint["validation_sentence_accuracy"][-1]
+            ),
+            "Validation WER : {:.5f}\n".format(
+                checkpoint["validation_wer"][-1]
+            ),
             "Validation Score : {:.5f}\n".format(checkpoint["validation_score"][-1]),
             "Validation Loss : {:.5f}\n".format(checkpoint["validation_losses"][-1]),
         )
-
     # Get data
-    transformed = transforms.Compose(
+    train_transformed = transforms.Compose(
         [
             # Resize so all images have the same size
-            to_binary(),  ### augment
+            # to_binary(),
+            transforms.Resize((options.input_size.height, options.input_size.width)),
+            transforms.RandomChoice([cutout(10,0.5,True,10),specAugment(row_num_masks=1,col_num_masks=1)]), # cutout, specAugment를 랜덤해서 고릅니다.
+            transforms.ToTensor(),
+        ]
+    )
+    val_transformed = transforms.Compose(
+        [
+            # Resize so all images have the same size
+            # to_binary(),
             transforms.Resize((options.input_size.height, options.input_size.width)),
             transforms.ToTensor(),
         ]
     )
-    train_data_loader, validation_data_loader, train_dataset, valid_dataset = dataset_loader(options, transformed)
+    train_data_loader, validation_data_loader, train_dataset, valid_dataset = dataset_loader(options, train_transformed,val_transformed)
+    # train_data_loader, validation_data_loader, train_dataset, valid_dataset = dataset_loader(options, transformed)
     print(
         "[+] Data\n",
         "The number of train samples : {}\n".format(len(train_dataset)),
@@ -344,13 +326,13 @@ def main(config_file, on_cpu):
     writer = init_tensorboard(name=options.prefix.strip("-"))
     start_epoch = checkpoint["epoch"]
     train_symbol_accuracy = checkpoint["train_symbol_accuracy"]
-    train_sentence_accuracy = checkpoint["train_sentence_accuracy"]
-    train_wer = checkpoint["train_wer"]
+    train_sentence_accuracy=checkpoint["train_sentence_accuracy"]
+    train_wer=checkpoint["train_wer"]
     train_score = checkpoint["train_score"]
     train_losses = checkpoint["train_losses"]
     validation_symbol_accuracy = checkpoint["validation_symbol_accuracy"]
-    validation_sentence_accuracy = checkpoint["validation_sentence_accuracy"]
-    validation_wer = checkpoint["validation_wer"]
+    validation_sentence_accuracy=checkpoint["validation_sentence_accuracy"]
+    validation_wer=checkpoint["validation_wer"]
     validation_score = checkpoint["validation_score"]
     validation_losses = checkpoint["validation_losses"]
     learning_rates = checkpoint["lr"]
@@ -379,14 +361,12 @@ def main(config_file, on_cpu):
             'symbol_accuracy': 0,
         }
     no_increase = 0
-    
+
     # Train
     for epoch in range(options.num_epochs):
         if options.patience >= 0 and no_increase > options.patience:
             break
-        
         start_time = time.time()
-
         epoch_text = "[{current:>{pad}}/{end}] Epoch {epoch}".format(
             current=epoch + 1,
             end=options.num_epochs,
@@ -408,14 +388,22 @@ def main(config_file, on_cpu):
             train=True,
         )
 
+
+
         train_losses.append(train_result["loss"])
         grad_norms.append(train_result["grad_norm"])
-        train_epoch_symbol_accuracy = (train_result["correct_symbols"] / train_result["total_symbols"])
+        train_epoch_symbol_accuracy = (
+            train_result["correct_symbols"] / train_result["total_symbols"]
+        )
         train_symbol_accuracy.append(train_epoch_symbol_accuracy)
-        train_epoch_sentence_accuracy = (train_result["sent_acc"] / train_result["num_sent_acc"])
+        train_epoch_sentence_accuracy = (
+                train_result["sent_acc"] / train_result["num_sent_acc"]
+        )
 
         train_sentence_accuracy.append(train_epoch_sentence_accuracy)
-        train_epoch_wer = (train_result["wer"] / train_result["num_wer"])
+        train_epoch_wer = (
+                train_result["wer"] / train_result["num_wer"]
+        )
         train_wer.append(train_epoch_wer)
         train_epoch_score = ((float(train_epoch_sentence_accuracy) * 0.9) + ((1 - float(train_epoch_wer)) * 0.1))
         train_score.append(train_epoch_score)
@@ -433,14 +421,15 @@ def main(config_file, on_cpu):
             options.max_grad_norm,
             device,
             train=False,
-            vis_wandb=True,
         )
         validation_losses.append(validation_result["loss"])
-        validation_epoch_symbol_accuracy = (validation_result["correct_symbols"] / validation_result["total_symbols"])
+        validation_epoch_symbol_accuracy = (
+            validation_result["correct_symbols"] / validation_result["total_symbols"]
+        )
         validation_symbol_accuracy.append(validation_epoch_symbol_accuracy)
 
         validation_epoch_sentence_accuracy = (
-                validation_result["sent_acc"] / validation_result["num_sent_acc"]
+            validation_result["sent_acc"] / validation_result["num_sent_acc"]
         )
         validation_sentence_accuracy.append(validation_epoch_sentence_accuracy)
         validation_epoch_wer = (
@@ -451,7 +440,10 @@ def main(config_file, on_cpu):
                 (float(validation_epoch_sentence_accuracy) * 0.9) + ((1 - float(validation_epoch_wer)) * 0.1)
         )
         validation_score.append(validation_epoch_score)
-        
+        # Save checkpoint
+        # make config
+        with open(config_file, 'r') as f:
+            option_dict = yaml.safe_load(f)
         # things to save
         checkpoint_log = {
             "epoch": start_epoch + epoch + 1,
@@ -474,27 +466,12 @@ def main(config_file, on_cpu):
             "id_to_token": train_data_loader.dataset.id_to_token,
             "best_score": best_score,
         }
-                
-        # update best score & save checkpoint
-        if validation_epoch_score > best_score['score']:
-            best_score = {
-                'epoch': start_epoch + epoch + 1, 
-                'score': validation_epoch_score, 
-                'sent_acc': validation_epoch_sentence_accuracy, 
-                'wer': validation_epoch_wer, 
-                'sym_acc': validation_epoch_symbol_accuracy,
-            }
-            save_checkpoint(checkpoint_log, prefix=options.prefix)
-            no_inrease = 0
-        else:
-            if not options.save_best_only:
-                save_checkpoint(checkpoint_log, prefix=options.prefix)
-            no_inrease += 1
-            
+
+        save_checkpoint(checkpoint_log, prefix=options.prefix)
         if options.wandb.wandb:
             wandb_log = {}
             # remove useless log
-            removed_keys = ['model', 'optimizer', 'configs', 'epoch', 'token_to_id', 'id_to_token', 'best_score']
+            removed_keys = ['model', 'optimizer', 'configs', 'epoch', 'token_to_id', 'id_to_token']
             for key in removed_keys:
                 del checkpoint_log[key]
             # convert key-value datatype to int
@@ -506,7 +483,6 @@ def main(config_file, on_cpu):
             # save log in wandb
             wandb.log(wandb_log)
 
-        # Summary
         elapsed_time = time.time() - start_time
         elapsed_time = time.strftime("%H:%M:%S", time.gmtime(elapsed_time))
         if epoch % options.print_epochs == 0 or epoch == options.num_epochs - 1:
@@ -559,10 +535,6 @@ def main(config_file, on_cpu):
                 validation_epoch_score,
                 model,
             )
-        
-    
-    best_score = {' '.join(k.split('_')).title(): v for k, v in best_score.items()}
-    print(f"\nBEST MODEL:\n{best_score}")
 
 
 if __name__ == "__main__":
@@ -575,7 +547,5 @@ if __name__ == "__main__":
         type=str,
         help="Path of configuration file",
     )
-    parser.add_argument("--cpu", action="store_true")
-    
     parser = parser.parse_args()
-    main(parser.config_file, parser.cpu)
+    main(parser.config_file)
