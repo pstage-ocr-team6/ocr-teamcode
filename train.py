@@ -126,6 +126,7 @@ def run_epoch(
                     for param_group in optimizer.param_groups
                     for p in param_group["params"]
                 ]
+                optimizer.zero_grad()
                 if scaler is not None:
                     # accumulates scaled gradients
                     scaler.scale(loss).backward()
