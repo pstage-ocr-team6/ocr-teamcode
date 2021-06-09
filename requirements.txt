@@ -9,4 +9,4 @@ Pillow==8.1.1
 tensorboardX==1.5
 editdistance==0.5.3
 python-dotenv==0.17.1
-wandb=0.10.30
+wandb==0.10.30
