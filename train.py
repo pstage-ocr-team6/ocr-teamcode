@@ -415,6 +415,9 @@ def main(config_file, on_cpu):
         }
     no_increase = 0
     
+    # initial teacher_forcing_ratio
+    teacher_forcing_ratio = options.teacher_forcing_ratio
+    
     # Train
     for epoch in range(options.num_epochs):
         if options.patience >= 0 and no_increase > options.patience:
@@ -428,6 +431,10 @@ def main(config_file, on_cpu):
             epoch=start_epoch + epoch + 1,
             pad=len(str(options.num_epochs)),
         )
+        
+        # linear teacher forcing scheduling
+        if options.teacher_forcing_damp > 0 and teacher_forcing_ratio > 0:
+            teacher_forcing_ratio = max(teacher_forcing_ratio - options.teacher_forcing_damp, 0)
 
         # Train
         train_result = run_epoch(
