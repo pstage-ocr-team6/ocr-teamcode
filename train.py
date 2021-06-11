@@ -10,6 +10,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.cuda.amp import autocast, GradScaler
 from torchvision import transforms
+from adamp import AdamP
 import yaml
 import wandb
 from dotenv import load_dotenv
@@ -29,6 +30,7 @@ from dataset import dataset_loader, START, PAD, load_vocab
 from scheduler import CircularLRBeta
 
 from metrics import word_error_rate, sentence_acc, get_worst_wer_img_path
+from custom_augment import cutout, specAugment
 
 # load env file
 load_dotenv(verbose=True)
@@ -107,6 +109,8 @@ def run_epoch(
         leave=False,
     ) as pbar:
         for d in data_loader:
+            torch.cuda.empty_cache()
+            
             input = d["image"].to(device)
 
             # The last batch may not be a full batch
@@ -289,14 +293,24 @@ def main(config_file, on_cpu):
         )
 
     # Get data
-    transformed = transforms.Compose(
+    train_transformed = transforms.Compose(
         [
             # Resize so all images have the same size
+            # to_binary(),
+            transforms.Resize((options.input_size.height, options.input_size.width)),
+            transforms.RandomChoice([cutout(10,0.5,True,10),specAugment(row_num_masks=1,col_num_masks=1)]), # cutout, specAugment를 랜덤해서 고릅니다.
+            transforms.ToTensor(),
+        ]
+    )
+    val_transformed = transforms.Compose(
+        [
+            # Resize so all images have the same size
+            # to_binary(),
             transforms.Resize((options.input_size.height, options.input_size.width)),
             transforms.ToTensor(),
         ]
     )
-    train_data_loader, validation_data_loader, train_dataset, valid_dataset = dataset_loader(options, transformed)
+    train_data_loader, validation_data_loader, train_dataset, valid_dataset = dataset_loader(options, train_transformed, val_transformed)
     print(
         "[+] Data\n",
         "The number of train samples : {}\n".format(len(train_dataset)),
@@ -335,9 +349,14 @@ def main(config_file, on_cpu):
                 'weight_decay': 0.0,
             }
         ]
-        optimizer = getattr(torch.optim, options.optimizer.optimizer)(
-            params_to_optimise, lr=options.optimizer.lr,
-        )
+        if options.optimizer.optimizer == 'AdamP':
+            optimizer = AdamP(
+                params_to_optimise, lr=options.optimizer.lr,
+            )
+        else:
+            optimizer = getattr(torch.optim, options.optimizer.optimizer)(
+                params_to_optimise, lr=options.optimizer.lr,
+            )
     else:
         params_to_optimise = [*enc_params_to_optimise, *dec_params_to_optimise]
         optimizer = get_optimizer(
@@ -367,7 +386,7 @@ def main(config_file, on_cpu):
         
     # learning rate scheduler
     if options.optimizer.is_cycle:
-        cycle = len(train_data_loader) * options.num_epochs
+        cycle = len(train_data_loader) * 100
         lr_scheduler = CircularLRBeta(
             optimizer, options.optimizer.lr, 10, 10, cycle, [0.95, 0.85]
         )
@@ -384,7 +403,7 @@ def main(config_file, on_cpu):
     # Log
     if not os.path.exists(options.prefix):
         os.makedirs(options.prefix)
-    log_file = open(os.path.join(options.prefix, "log.txt"), "w")
+    # log_file = open(os.path.join(options.prefix, "log.txt"), "w")
     shutil.copy(config_file, os.path.join(options.prefix, "train_config.yaml"))
     if options.print_epochs is None:
         options.print_epochs = options.num_epochs
@@ -599,7 +618,8 @@ def main(config_file, on_cpu):
                 time=elapsed_time_str,
             )
             print(output_string)
-            log_file.write(output_string + "\n")
+            with open(os.path.join(options.prefix, "log.txt"), 'a') as f:
+                f.write(output_string+ "\n")
             write_tensorboard(
                 writer,
                 start_epoch + epoch + 1,
