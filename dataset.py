@@ -220,8 +220,7 @@ class LoadEvalDataset(Dataset):
 
         return {"path": item["path"], "file_path":item["file_path"],"truth": item["truth"], "image": image}
 
-def dataset_loader(options, transformed):
-
+def dataset_loader(options, train_transformed, valid_transformed):
     # Read data
     train_data, valid_data = [], [] 
     if options.data.random_split:
@@ -244,7 +243,7 @@ def dataset_loader(options, transformed):
 
     # Load data
     train_dataset = LoadDataset(
-        train_data, options.data.token_paths, crop=options.data.crop, transform=transformed, rgb=options.data.rgb
+        train_data, options.data.token_paths, crop=options.data.crop, transform=train_transformed, rgb=options.data.rgb
     )
     train_data_loader = DataLoader(
         train_dataset,
@@ -255,7 +254,7 @@ def dataset_loader(options, transformed):
     )
 
     valid_dataset = LoadDataset(
-        valid_data, options.data.token_paths, crop=options.data.crop, transform=transformed, rgb=options.data.rgb
+        valid_data, options.data.token_paths, crop=options.data.crop, transform=valid_transformed, rgb=options.data.rgb
     )
     valid_data_loader = DataLoader(
         valid_dataset,

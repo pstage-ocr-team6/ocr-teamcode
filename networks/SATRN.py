@@ -7,6 +7,7 @@ import random
 from collections import OrderedDict
 
 from dataset import START, PAD
+from .loss import LabelSmoothingCrossEntropy
 
 
 class BottleneckBlock(nn.Module):
@@ -647,7 +648,7 @@ class TransformerDecoderLayer(nn.Module):
             att = self.self_attention_layer(tgt, tgt, tgt, tgt_mask)
             out = self.self_attention_norm(att + tgt)
 
-            att = self.attention_layer(tgt, src, src)
+            att = self.attention_layer(out, src, src)
             out = self.attention_norm(att + out)
 
             ff = self.feedforward_layer(out)
@@ -657,7 +658,7 @@ class TransformerDecoderLayer(nn.Module):
             att = self.self_attention_layer(tgt, tgt_prev, tgt_prev, tgt_mask)
             out = self.self_attention_norm(att + tgt)
 
-            att = self.attention_layer(tgt, src, src)
+            att = self.attention_layer(out, src, src)
             out = self.attention_norm(att + out)
 
             ff = self.feedforward_layer(out)
@@ -828,9 +829,15 @@ class SATRN(nn.Module):
             layer_num=FLAGS.SATRN.decoder.layer_num,
         )
 
-        self.criterion = (
-            nn.CrossEntropyLoss(ignore_index=train_dataset.token_to_id[PAD])
-        )
+        if FLAGS.label_smoothing > 0:
+            self.criterion = LabelSmoothingCrossEntropy(
+                eps=FLAGS.label_smoothing, 
+                ignore_index=train_dataset.token_to_id[PAD]
+            )
+        else:
+            self.criterion = (
+                nn.CrossEntropyLoss(ignore_index=train_dataset.token_to_id[PAD])
+            )
         
         if checkpoint:
             self.load_state_dict(checkpoint)

@@ -15,8 +15,8 @@ SATRN:
     separable_ff: True # only if conv_ff is True
   decoder:
     src_dim: 300
-    hidden_dim: 128
-    filter_dim: 512
+    hidden_dim: 300
+    filter_dim: 1200
     layer_num: 3
     head_num: 8
 
@@ -49,13 +49,14 @@ teacher_forcing_damp: 5e-3 # 0 to turn off
 max_grad_norm: 2.0
 seed: 1234
 optimizer:
-  optimizer: Adam # Adam, Adadelta
+  optimizer: AdamP # Adam, Adadelta
   lr: 5e-4 # 1e-4
   weight_decay: 1e-4
   selective_weight_decay: True
   is_cycle: True
+label_smoothing: 0.2 # 0 to off
 
-patience: 10 # -1 for off
+patience: 30 # -1 for off
 save_best_only: True
 
 fp16: True
