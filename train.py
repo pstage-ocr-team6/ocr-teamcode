@@ -22,12 +22,13 @@ from checkpoint import (
     init_tensorboard,
     write_tensorboard,
 )
+from transform import RotateByDistribution
 from psutil import virtual_memory
 
 from flags import Flags
 from utils import get_network, get_optimizer, get_wandb_config
 from dataset import dataset_loader, START, PAD, load_vocab
-from scheduler import CircularLRBeta
+from scheduler import CircularLRBeta, CosineAnnealingWithWarmupAndHardRestart, CosineDecayWithWarmup
 
 from metrics import word_error_rate, sentence_acc
 from custom_augment import cutout, specAugment
@@ -288,6 +289,7 @@ def main(config_file, on_cpu):
             # to_binary(),
             transforms.Resize((options.input_size.height, options.input_size.width)),
             transforms.RandomChoice([cutout(10,0.5,True,10),specAugment(row_num_masks=1,col_num_masks=1)]), # cutout, specAugment를 랜덤해서 고릅니다.
+            RotateByDistribution(),
             transforms.ToTensor(),
         ]
     )
@@ -380,10 +382,17 @@ def main(config_file, on_cpu):
             optimizer, options.optimizer.lr, 10, 10, cycle, [0.95, 0.85]
         )
     else:
-        lr_scheduler = optim.lr_scheduler.StepLR(
+        # lr_scheduler = optim.lr_scheduler.StepLR(
+        #     optimizer,
+        #     step_size=options.optimizer.lr_epochs,
+        #     gamma=options.optimizer.lr_factor,
+        # )
+        lr_scheduler = CosineDecayWithWarmup(
             optimizer,
-            step_size=options.optimizer.lr_epochs,
-            gamma=options.optimizer.lr_factor,
+            warmup_steps=len(train_data_loader) * options.optimizer.warmup,
+            total_steps=len(train_data_loader) * options.num_epochs,
+            max_lr=options.optimizer.lr,
+            min_lr=options.optimizer.lr / 20,
         )
         
     # Scaler for mixed precision
@@ -551,11 +560,11 @@ def main(config_file, on_cpu):
                 'sym_acc': validation_epoch_symbol_accuracy,
             }
             save_checkpoint(checkpoint_log, prefix=options.prefix)
-            no_inrease = 0
+            no_increase = 0
         else:
             if not options.save_best_only:
                 save_checkpoint(checkpoint_log, prefix=options.prefix)
-            no_inrease += 1
+            no_increase += 1
             
         if options.wandb.wandb:
             wandb_log = {}
