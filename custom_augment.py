@@ -1,9 +1,13 @@
 from skimage import transform
+import torchvision.transforms as transforms
 import numpy as np
 import cv2
 from pre_processing import *
 from matplotlib import cm
 from PIL import Image
+from exp.nb_SparseImageWarp import sparse_image_warp
+import random
+import torch
 
 
 class to_binary(object):
@@ -85,7 +89,6 @@ class specAugment(object):
         self.row_num_masks = row_num_masks
         self.col_num_masks = col_num_masks
         self.replace_with_zero = replace_with_zero
-        
     def __call__(self,image):
         if isinstance(image, torch.Tensor):
             pass
@@ -95,8 +98,34 @@ class specAugment(object):
         combined = col_mask(row_mask(image, num_masks=2, replace_with_zero=True), num_masks=1, replace_with_zero=True)
         combined = transforms.ToPILImage()(combined).convert("L")
         return combined
+
+
+def time_warp(spec, W=5):
+    ''' 이미지를 랜덤으로 왜곡 시킵니다. 
+        https://stackoverflow.com/questions/57371510/sparse-image-warp-in-tensorflow-doesnt-work
+
+        input : spec -> image(tensor), W -> warp 범위
+        output: 왜곡된 image(tensor)
+    '''
+    num_rows = spec.shape[1]
+    spec_len = spec.shape[2]
+    device = spec.device
     
+    y = num_rows//2
+    horizontal_line_at_ctr = spec[0][y]
+    assert len(horizontal_line_at_ctr) == spec_len
     
+    point_to_warp = horizontal_line_at_ctr[random.randrange(W, spec_len - W)]
+    assert isinstance(point_to_warp, torch.Tensor)
+
+    # Uniform distribution from (0,W) with chance to be up to W negative
+    dist_to_warp = random.randrange(-W, W)
+    src_pts, dest_pts = (torch.tensor([[[y, point_to_warp]]], device=device), 
+                        torch.tensor([[[y, point_to_warp + dist_to_warp]]], device=device))
+    warped_spectro, dense_flows = sparse_image_warp(spec, src_pts, dest_pts)
+    return warped_spectro.squeeze(3)
+    
+
 def row_mask(spec, F=10, num_masks=1, replace_with_zero=False):
     ''' 행 방향으로 선을 긋습니다.
         input : spec -> image(tensor), F -> 선의 최대 길이 , num_masks -> 그어질 선의 개수 , replace_with_zero -> 0으로 값을 채울건지
