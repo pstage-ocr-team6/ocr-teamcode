@@ -31,8 +31,10 @@ from dataset import dataset_loader, START, PAD, load_vocab
 from scheduler import CircularLRBeta, CosineDecayWithWarmup
 
 from metrics import word_error_rate, sentence_acc, get_worst_wer_img_path
-from custom_augment import cutout, specAugment
+from custom_augment import cutout, specAugment, to_binary
 
+import warnings
+warnings.filterwarnings(action='ignore')
 # load env file
 load_dotenv(verbose=True)
 
