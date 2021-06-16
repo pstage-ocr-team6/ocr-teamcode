@@ -8,7 +8,9 @@ import shutil
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from torch.cuda.amp import autocast, GradScaler
 from torchvision import transforms
+from adamp import AdamP
 import yaml
 import wandb
 from dotenv import load_dotenv
@@ -20,15 +22,16 @@ from checkpoint import (
     init_tensorboard,
     write_tensorboard,
 )
+from transform import RotateByDistribution
 from psutil import virtual_memory
 
 from flags import Flags
 from utils import get_network, get_optimizer, get_wandb_config
 from dataset import dataset_loader, START, PAD, load_vocab
-from scheduler import CircularLRBeta
+from scheduler import CircularLRBeta, CosineDecayWithWarmup
 
 from metrics import word_error_rate, sentence_acc, get_worst_wer_img_path
-from custom_augment import to_binary
+from custom_augment import cutout, specAugment, to_binary
 
 import warnings
 warnings.filterwarnings(action='ignore')
@@ -50,6 +53,8 @@ def id_to_string(tokens, data_loader, do_eval=0):
                 if token not in special_ids:
                     if token != -1:
                         string += data_loader.dataset.id_to_token[token] + " "
+                elif token == data_loader.dataset.token_to_id["<EOS>"]:
+                    break
         else:
             for token in example:
                 token = token.item()
@@ -70,6 +75,7 @@ def run_epoch(
     teacher_forcing_ratio,
     max_grad_norm,
     device,
+    scaler=None,
     train=True,
     vis_wandb=True,
 ):
@@ -79,6 +85,15 @@ def run_epoch(
         model.train()
     else:
         model.eval()
+        
+    def _infer(input, expected):
+        output = model(input, expected, train, teacher_forcing_ratio)
+        decoded_values = output.transpose(1, 2)
+        _, sequence = torch.topk(decoded_values, 1, dim=1)
+        sequence = sequence.squeeze(1)
+
+        loss = criterion(decoded_values, expected[:, 1:])
+        return loss, sequence
 
     losses = []
     grad_norms = []
@@ -97,6 +112,8 @@ def run_epoch(
         leave=False,
     ) as pbar:
         for d in data_loader:
+            torch.cuda.empty_cache()
+            
             input = d["image"].to(device)
 
             # The last batch may not be a full batch
@@ -105,14 +122,12 @@ def run_epoch(
 
             # Replace -1 with the PAD token
             expected[expected == -1] = data_loader.dataset.token_to_id[PAD]
-
-            output = model(input, expected, train, teacher_forcing_ratio)
-
-            decoded_values = output.transpose(1, 2)
-            _, sequence = torch.topk(decoded_values, 1, dim=1)
-            sequence = sequence.squeeze(1)
-
-            loss = criterion(decoded_values, expected[:, 1:])
+            
+            if scaler is not None:
+                with autocast():
+                    loss, sequence = _infer(input, expected)
+            else:
+                loss, sequence = _infer(input, expected)
 
             if train:
                 optim_params = [
@@ -121,16 +136,31 @@ def run_epoch(
                     for p in param_group["params"]
                 ]
                 optimizer.zero_grad()
-                loss.backward()
-                # Clip gradients, it returns the total norm of all parameters
-                grad_norm = nn.utils.clip_grad_norm_(
-                    optim_params, max_norm=max_grad_norm
-                )
-                grad_norms.append(grad_norm)
-
-                # cycle
+                if scaler is not None:
+                    # accumulates scaled gradients
+                    scaler.scale(loss).backward()
+                    
+                    # clip gradients, it returns the total norm of all parameters
+                    # unscale for gradient clipping
+                    scaler.unscale_(optimizer)
+                    grad_norm = nn.utils.clip_grad_norm_(
+                        optim_params, max_norm=max_grad_norm
+                    )
+                    grad_norms.append(grad_norm)
+                    
+                    scaler.step(optimizer)
+                    
+                    # update scaler for next iteration
+                    scaler.update()
+                else:
+                    loss.backward()
+                    grad_norm = nn.utils.clip_grad_norm_(
+                        optim_params, max_norm=max_grad_norm
+                    )
+                    grad_norms.append(grad_norm)
+                    optimizer.step()
+                
                 lr_scheduler.step()
-                optimizer.step()
 
             losses.append(loss.item())
 
@@ -266,15 +296,25 @@ def main(config_file, on_cpu):
         )
 
     # Get data
-    transformed = transforms.Compose(
+    train_transformed = transforms.Compose(
         [
             # Resize so all images have the same size
-            to_binary(),  ### augment
+            # to_binary(),
+            transforms.Resize((options.input_size.height, options.input_size.width)),
+            transforms.RandomChoice([cutout(10,0.5,True,10),specAugment(row_num_masks=1,col_num_masks=1)]), # cutout, specAugment를 랜덤해서 고릅니다.
+#             RotateByDistribution(),
+            transforms.ToTensor(),
+        ]
+    )
+    val_transformed = transforms.Compose(
+        [
+            # Resize so all images have the same size
+            # to_binary(),
             transforms.Resize((options.input_size.height, options.input_size.width)),
             transforms.ToTensor(),
         ]
     )
-    train_data_loader, validation_data_loader, train_dataset, valid_dataset = dataset_loader(options, transformed)
+    train_data_loader, validation_data_loader, train_dataset, valid_dataset = dataset_loader(options, train_transformed, val_transformed)
     print(
         "[+] Data\n",
         "The number of train samples : {}\n".format(len(train_dataset)),
@@ -290,15 +330,46 @@ def main(config_file, on_cpu):
         device,
         train_dataset,
     )
-    model.train()
     criterion = model.criterion.to(device)
+
+    # Get optimizer
     enc_params_to_optimise = [
         param for param in model.encoder.parameters() if param.requires_grad
     ]
     dec_params_to_optimise = [
         param for param in model.decoder.parameters() if param.requires_grad
     ]
-    params_to_optimise = [*enc_params_to_optimise, *dec_params_to_optimise]
+    if options.optimizer.selective_weight_decay:
+        no_decay_keywords = ['bias', 'norm.weight']
+        params_to_optimise = [
+            {
+                'params': [param for name, param in model.named_parameters()
+                        if param.requires_grad and not any(nd in name for nd in no_decay_keywords)],
+                'weight_decay': options.optimizer.weight_decay,
+            },
+            {
+                'params': [param for name, param in model.named_parameters()
+                        if param.requires_grad and any(nd in name for nd in no_decay_keywords)],
+                'weight_decay': 0.0,
+            }
+        ]
+        if options.optimizer.optimizer == 'AdamP':
+            optimizer = AdamP(
+                params_to_optimise, lr=options.optimizer.lr,
+            )
+        else:
+            optimizer = getattr(torch.optim, options.optimizer.optimizer)(
+                params_to_optimise, lr=options.optimizer.lr,
+            )
+    else:
+        params_to_optimise = [*enc_params_to_optimise, *dec_params_to_optimise]
+        optimizer = get_optimizer(
+            options.optimizer.optimizer,
+            params_to_optimise,
+            lr=options.optimizer.lr,
+            weight_decay=options.optimizer.weight_decay,
+        )
+        
     print(
         "[+] Network\n",
         "Type: {}\n".format(options.network),
@@ -309,21 +380,17 @@ def main(config_file, on_cpu):
             sum(p.numel() for p in dec_params_to_optimise),
         ),
     )
-
-    # Get optimizer
-    optimizer = get_optimizer(
-        options.optimizer.optimizer,
-        params_to_optimise,
-        lr=options.optimizer.lr,
-        weight_decay=options.optimizer.weight_decay,
-    )
+        
+    # load state dict to optimizer if needed
     optimizer_state = checkpoint.get("optimizer")
     if optimizer_state:
         optimizer.load_state_dict(optimizer_state)
     for param_group in optimizer.param_groups:
         param_group["initial_lr"] = options.optimizer.lr
+        
+    # learning rate scheduler
     if options.optimizer.is_cycle:
-        cycle = len(train_data_loader) * options.num_epochs
+        cycle = len(train_data_loader) * 100
         lr_scheduler = CircularLRBeta(
             optimizer, options.optimizer.lr, 10, 10, cycle, [0.95, 0.85]
         )
@@ -333,11 +400,21 @@ def main(config_file, on_cpu):
             step_size=options.optimizer.lr_epochs,
             gamma=options.optimizer.lr_factor,
         )
+#         lr_scheduler = CosineDecayWithWarmup(
+#             optimizer,
+#             warmup_steps=len(train_data_loader) * options.optimizer.warmup,
+#             total_steps=len(train_data_loader) * options.num_epochs,
+#             max_lr=options.optimizer.lr,
+#             min_lr=options.optimizer.lr / 20,
+#         )
+        
+    # Scaler for mixed precision
+    scaler = GradScaler() if options.fp16 and not on_cpu else None
 
     # Log
     if not os.path.exists(options.prefix):
         os.makedirs(options.prefix)
-    log_file = open(os.path.join(options.prefix, "log.txt"), "w")
+    # log_file = open(os.path.join(options.prefix, "log.txt"), "w")
     shutil.copy(config_file, os.path.join(options.prefix, "train_config.yaml"))
     if options.print_epochs is None:
         options.print_epochs = options.num_epochs
@@ -380,6 +457,9 @@ def main(config_file, on_cpu):
         }
     no_increase = 0
     
+    # initial teacher_forcing_ratio
+    teacher_forcing_ratio = options.teacher_forcing_ratio
+    
     # Train
     for epoch in range(options.num_epochs):
         if options.patience >= 0 and no_increase > options.patience:
@@ -393,6 +473,10 @@ def main(config_file, on_cpu):
             epoch=start_epoch + epoch + 1,
             pad=len(str(options.num_epochs)),
         )
+        
+        # linear teacher forcing scheduling
+        if options.teacher_forcing_damp > 0 and teacher_forcing_ratio > 0:
+            teacher_forcing_ratio = max(teacher_forcing_ratio - options.teacher_forcing_damp, 0)
 
         # Train
         train_result = run_epoch(
@@ -405,6 +489,7 @@ def main(config_file, on_cpu):
             options.teacher_forcing_ratio,
             options.max_grad_norm,
             device,
+            scaler=scaler,
             train=True,
         )
 
@@ -432,6 +517,7 @@ def main(config_file, on_cpu):
             options.teacher_forcing_ratio,
             options.max_grad_norm,
             device,
+            scaler=scaler,
             train=False,
             vis_wandb=True,
         )
@@ -453,6 +539,8 @@ def main(config_file, on_cpu):
         validation_score.append(validation_epoch_score)
         
         # things to save
+        elapsed_time = time.time() - start_time
+        elapsed_time_str = time.strftime("%H:%M:%S", time.gmtime(elapsed_time))
         checkpoint_log = {
             "epoch": start_epoch + epoch + 1,
             "train_losses": train_losses,
@@ -466,6 +554,7 @@ def main(config_file, on_cpu):
             "validation_wer": validation_wer,
             "validation_score": validation_score,
             "lr": epoch_lr,
+            "elapsed_time": elapsed_time,
             "grad_norm": grad_norms,
             "model": model.state_dict(),
             "optimizer": optimizer.state_dict(),
@@ -485,11 +574,11 @@ def main(config_file, on_cpu):
                 'sym_acc': validation_epoch_symbol_accuracy,
             }
             save_checkpoint(checkpoint_log, prefix=options.prefix)
-            no_inrease = 0
+            no_increase = 0
         else:
             if not options.save_best_only:
                 save_checkpoint(checkpoint_log, prefix=options.prefix)
-            no_inrease += 1
+            no_increase += 1
             
         if options.wandb.wandb:
             wandb_log = {}
@@ -507,8 +596,6 @@ def main(config_file, on_cpu):
             wandb.log(wandb_log)
 
         # Summary
-        elapsed_time = time.time() - start_time
-        elapsed_time = time.strftime("%H:%M:%S", time.gmtime(elapsed_time))
         if epoch % options.print_epochs == 0 or epoch == options.num_epochs - 1:
             output_string = (
                 "{epoch_text}: "
@@ -539,10 +626,11 @@ def main(config_file, on_cpu):
                 validation_loss=validation_result["loss"],
                 best_epoch=best_score["epoch"],
                 lr=epoch_lr,
-                time=elapsed_time,
+                time=elapsed_time_str,
             )
             print(output_string)
-            log_file.write(output_string + "\n")
+            with open(os.path.join(options.prefix, "log.txt"), 'a') as f:
+                f.write(output_string+ "\n")
             write_tensorboard(
                 writer,
                 start_epoch + epoch + 1,
