@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import numpy as np
 import math
 import random
 from collections import OrderedDict
@@ -110,7 +109,12 @@ class DeepCNN300(nn.Module):
     """
 
     def __init__(
-        self, input_channel, num_in_features, output_channel=256, dropout_rate=0.2, depth=16, growth_rate=24
+        self, 
+        input_channel, 
+        num_in_features, 
+        dropout_rate=0.2, 
+        depth=16, 
+        growth_rate=24,
     ):
         super(DeepCNN300, self).__init__()
         self.conv0 = nn.Conv2d(
@@ -283,46 +287,75 @@ class Feedforward(nn.Module):
         return self.layers(input)
     
     
+class ConvLayerForFeedforward(nn.Module):
+    def __init__(
+        self, 
+        in_channels, 
+        out_channels, 
+        kernel_size, 
+        padding=0, 
+        groups=1, 
+        bias=False,
+    ):
+        super(ConvLayerForFeedforward, self).__init__()
+        self.conv = nn.Conv2d(
+            in_channels, 
+            out_channels, 
+            kernel_size, 
+            padding=padding,
+            groups=groups,
+            bias=bias,
+        )
+        self.norm = nn.BatchNorm2d(out_channels)
+        self.acvication = nn.ReLU()
+    
+    def forward(self, x):
+        x = self.conv(x)
+        x = self.norm(x)
+        x = self.acvication(x)
+        return x
+
+
 class LocalityAwareFeedforward(nn.Module):
-    def __init__(self, hidden_dim, filter_size=2048, dropout_prob=0.1, separable=True):
+    def __init__(
+        self, 
+        hidden_dim, 
+        filter_size=2048, 
+        dropout_prob=0.1, 
+        separable=True
+    ):
         super(LocalityAwareFeedforward, self).__init__()
         if separable:
-            self.layer_in = nn.Sequential(OrderedDict({
-                'conv': nn.Conv2d(
-                    hidden_dim, filter_size, kernel_size=1, bias=False,
-                ),
-                'norm': nn.BatchNorm2d(filter_size),
-                'activation': nn.ReLU(),
-            }))
-            self.layer_hid = nn.Sequential(OrderedDict({
-                'conv': nn.Conv2d(
-                    filter_size, filter_size, kernel_size=3, padding=1, groups=filter_size, bias=False,
-                ),
-                'norm': nn.BatchNorm2d(filter_size),
-                'activation': nn.ReLU(),
-            }))
-            self.layer_out = nn.Sequential(OrderedDict({
-                'conv': nn.Conv2d(
-                    filter_size, hidden_dim, kernel_size=1, bias=False,
-                ),
-                'norm': nn.BatchNorm2d(hidden_dim),
-                'activation': nn.ReLU(),
-            }))
+            self.layer_in = ConvLayerForFeedforward(
+                hidden_dim, 
+                filter_size, 
+                kernel_size=1,
+            )
+            self.layer_hid = ConvLayerForFeedforward(
+                filter_size,
+                filter_size,
+                kernel_size=3,
+                padding=1,
+                groups=filter_size
+            )
+            self.layer_out = ConvLayerForFeedforward(
+                filter_size,
+                hidden_dim,
+                kernel_size=1,
+            )
         else:
-            self.layer_in = nn.Sequential(OrderedDict({
-                'conv': nn.Conv2d(
-                    hidden_dim, filter_size, kernel_size=3, padding=1, bias=False,
-                ),
-                'norm': nn.BatchNorm2d(filter_size),
-                'activation': nn.ReLU(),
-            }))
-            self.layer_out = nn.Sequential(OrderedDict({
-                'conv': nn.Conv2d(
-                    filter_size, hidden_dim, kernel_size=3, padding=1, bias=False,
-                ),
-                'norm': nn.BatchNorm2d(hidden_dim),
-                'activation': nn.ReLU(),
-            }))
+            self.layer_in = ConvLayerForFeedforward(
+                hidden_dim, 
+                filter_size, 
+                kernel_size=3,
+                padding=1,
+            )
+            self.layer_out = ConvLayerForFeedforward(
+                filter_size, 
+                hidden_dim, 
+                kernel_size=3,
+                padding=1,
+            )
         
         self.separable = separable
         self.dropout = nn.Dropout(dropout_prob)
@@ -342,7 +375,13 @@ class LocalityAwareFeedforward(nn.Module):
 
 class TransformerEncoderLayer(nn.Module):
     def __init__(
-        self, input_size, filter_size, head_num, dropout_rate=0.2, conv_ff=True, separable_ff=True, 
+        self, 
+        input_size, 
+        filter_size, 
+        head_num, 
+        dropout_rate=0.2, 
+        conv_ff=True, 
+        separable_ff=True, 
     ):
         super(TransformerEncoderLayer, self).__init__()
 
@@ -381,7 +420,13 @@ class TransformerEncoderLayer(nn.Module):
 
 class TransformerEncoderLayerWith2DAttention(nn.Module):
     def __init__(
-        self, input_size, filter_size, head_num, dropout_rate=0.2, conv_ff=True, separable_ff=True, 
+        self, 
+        input_size, 
+        filter_size, 
+        head_num, 
+        dropout_rate=0.2, 
+        conv_ff=True, 
+        separable_ff=True, 
     ):
         super(TransformerEncoderLayerWith2DAttention, self).__init__()
 

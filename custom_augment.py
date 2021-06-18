@@ -1,9 +1,7 @@
-from skimage import transform
 import torchvision.transforms as transforms
 import numpy as np
 import cv2
 from pre_processing import *
-from matplotlib import cm
 from PIL import Image
 from exp.nb_SparseImageWarp import sparse_image_warp
 import random
@@ -14,26 +12,22 @@ class to_binary(object):
     """
     binary_image로 만듭니다.(약간의 전처리와 함께)
     """
-    def __init__(self):
-        pass
+    
     def __call__(self, sample):
         gray = np.array(sample)
-        # print(gray.shape)
-        h,w=gray.shape[:2]
-        orig_mean=gray.mean()
-        black=np.zeros_like(gray)
-        _max,_min=sliding_window1(gray)
+        orig_mean = gray.mean()
+        _max,_min = sliding_window1(gray)
         if orig_mean < 127:
-            reszied_gray,show=remove_brightness(gray)
+            reszied_gray, show = remove_brightness(gray)
         else:
-            if (_max-orig_mean) > 40 or (_min-orig_mean)<-40 :
-                reszied_gray,show=remove_brightness(gray)
+            if (_max - orig_mean) > 40 or (_min - orig_mean) < -40 :
+                reszied_gray, show = remove_brightness(gray)
             else:
-                reszied_gray,show=global_threshold1(gray)
-                blurred = cv2.GaussianBlur(reszied_gray, (11,11), 1)
-                reszied_gray_th=cv2.adaptiveThreshold(blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,cv2.THRESH_BINARY, 15,2)
-                masked_gray = np.where(show<127,reszied_gray_th,0)
-                show=masked_gray+show
+                reszied_gray,show = global_threshold1(gray)
+                blurred = cv2.GaussianBlur(reszied_gray, (11, 11), 1)
+                reszied_gray_th = cv2.adaptiveThreshold(blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,cv2.THRESH_BINARY, 15, 2)
+                masked_gray = np.where(show < 127, reszied_gray_th, 0)
+                show = masked_gray + show
         im = Image.fromarray(show)
         return im
 
@@ -43,11 +37,12 @@ class cutout(object):
         input : mask_size -> 가릴 박스 사이즈, p -> mask가 생길 확률, cutout_inside -> 이미지안에 생길건지(bool), max_boxes -> 박스가 생길 최대 수
         output : cutout 된 image(PIL.Image)
     '''
-    def __init__(self,mask_size,p,cutout_inside,max_boxes):
-        self.mask_size=mask_size
-        self.p=p
-        self.cutout_inside=cutout_inside
-        self.max_boxes=max_boxes
+    def __init__(self, mask_size, p, cutout_inside, max_boxes):
+        self.mask_size = mask_size
+        self.p = p
+        self.cutout_inside = cutout_inside
+        self.max_boxes = max_boxes
+        
     def __call__(self,image):
         mask_size_half = self.mask_size // 2
         offset = 1 if self.mask_size % 2 == 0 else 0
@@ -85,11 +80,12 @@ class specAugment(object):
     ''' 멘토님이 추천해 주셨던 specAugment
         totensor 다음 쓰시는게 깔끔합니다.
     '''
-    def __init__(self,row_num_masks,col_num_masks,replace_with_zero=True):
+    def __init__(self, row_num_masks, col_num_masks, replace_with_zero=True):
         self.row_num_masks = row_num_masks
         self.col_num_masks = col_num_masks
         self.replace_with_zero = replace_with_zero
-    def __call__(self,image):
+
+    def __call__(self, image):
         if isinstance(image, torch.Tensor):
             pass
         else:
@@ -111,7 +107,7 @@ def time_warp(spec, W=5):
     spec_len = spec.shape[2]
     device = spec.device
     
-    y = num_rows//2
+    y = num_rows // 2
     horizontal_line_at_ctr = spec[0][y]
     assert len(horizontal_line_at_ctr) == spec_len
     
@@ -164,6 +160,7 @@ def col_mask(spec, T=10, num_masks=1, replace_with_zero=False):
         if (t_zero == t_zero + t): return cloned
 
         mask_end = random.randrange(t_zero, t_zero + t)
-        if (replace_with_zero): cloned[0][:,t_zero:mask_end] = 0
-        else: cloned[0][:,t_zero:mask_end] = cloned.mean()
+        if (replace_with_zero): cloned[0][:, t_zero:mask_end] = 0
+        else: cloned[0][:, t_zero:mask_end] = cloned.mean()
+    
     return cloned

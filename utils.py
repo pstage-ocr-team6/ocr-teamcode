@@ -1,6 +1,7 @@
 import yaml
 from copy import deepcopy
 import torch.optim as optim
+from adamp import AdamP
 
 from networks.Attention import Attention
 from networks.SATRN import SATRN
@@ -28,7 +29,9 @@ def get_network(
 
 
 def get_optimizer(optimizer, params, lr, weight_decay=None):
-    if optimizer == "Adam":
+    if optimizer == "AdamP":
+        optimizer = AdamP(params, lr=lr)
+    elif optimizer == "Adam":
         optimizer = optim.Adam(params, lr=lr)
     elif optimizer == "Adadelta":
         optim.Adadelta(params, lr=lr, weight_decay=weight_decay)
