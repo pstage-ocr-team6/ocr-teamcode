@@ -1,12 +1,11 @@
 import torch
 import os
 from train import id_to_string
-from metrics import word_error_rate, sentence_acc
 from checkpoint import load_checkpoint
 from torchvision import transforms
-from dataset import LoadEvalDataset, collate_eval_batch, START, PAD
+from dataset import LoadEvalDataset, collate_eval_batch
 from flags import Flags
-from utils import get_network, get_optimizer
+from utils import get_network
 import csv
 from torch.utils.data import DataLoader
 import argparse
