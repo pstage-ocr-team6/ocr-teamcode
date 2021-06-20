@@ -1,65 +1,68 @@
-# 업스테이지 수학 수식 OCR 모델
+<div align="center">
+    <h1>Formula Image Latex Recognition</h1>
+    <img src="assets/logo.png" alt="logo"/>
+    <br/>
+    <img src="https://img.shields.io/github/stars/pstage-ocr-team6/ocr-teamcode?color=yellow" alt="Star"/>
+    <img src="https://img.shields.io/github/forks/pstage-ocr-team6/ocr-teamcode?color=green" alt="Forks">
+    <img src="https://img.shields.io/github/issues/pstage-ocr-team6/ocr-teamcode?color=red" alt="Issues"/>
+    <img src="https://img.shields.io/github/license/pstage-ocr-team6/ocr-teamcode" alt="License"/>
+</div>
 
-## Requirements
+---
 
-- Python 3
-- [PyTorch][pytorch]
+## 📝 Table of Contents
 
-All dependencies can be installed with PIP.
+- [Latex Recognition Task](#-latex-recognition-task)
+- [Installation](#-installation)
+- [File Structure](#-file-structure)
+- [Setting](#-setting)
+  - [Dataset](#dataset)
+  - [Config](#config)
+- [Usage](#-usage)
+- [Demo](#-demo)
+- [References](#-references)
+- [Contributors](#-contributors)
+- [License](#-license)
 
-```sh
-pip install tensorboardX tqdm pyyaml psutil
-```
+---
 
-현재 검증된 GPU 개발환경으로는
-- `Pytorch 1.0.0 (CUDA 10.1)`
-- `Pytorch 1.4.0 (CUDA 10.0)`
-- `Pytorch 1.7.1 (CUDA 11.0)`
+## ➗ Latex Recognition Task
 
+## 🛠️ Installation
 
-## Supported Models
+Requirements
+pip install -r requirements.txt
 
-- [CRNN][arxiv-zhang18]
-- [SATRN](https://github.com/clovaai/SATRN)
+## 📁 File Structure
 
+진짜 파일 구조만
 
-## Supported Data
-- [Aida][Aida] (synthetic handwritten)
-- [CROHME][CROHME] (online handwritten)
-- [IM2LATEX][IM2LATEX] (pdf, synthetic handwritten)
-- [Upstage][Upstage] (print, handwritten)
+## ⚙️ Setting
 
+### Dataset
 
-모든 데이터는 팀 저장소에서 train-ready 포맷으로 다운 가능하다.
-```
-[dataset]/
-├── gt.txt
-├── tokens.txt
-└── images/
-    ├── *.jpg
-    ├── ...     
-    └── *.jpg
-```
+데이터셋 구성
 
+### Config
 
-## Usage
+Config 어떻게 설정하는지
 
-### Training
+## ⏩ Usage
 
-```sh
-python train.py
-```
+train
+inference
 
+## 🚀 Demo
 
-### Evaluation
+종이에 쓴 손글씨 (오프라인)
+아이패드에 쓴 손글씨 (오프라인)
+프린트한 글씨 (오프라인)
+컴퓨터에 띄운 글씨 (온라인)
 
-```sh
-python evaluate.py
-```
+## 📚 References
 
-[arxiv-zhang18]: https://arxiv.org/pdf/1801.03530.pdf
-[CROHME]: https://www.isical.ac.in/~crohme/
-[Aida]: https://www.kaggle.com/aidapearson/ocr-data
-[Upstage]: https://www.upstage.ai/
-[IM2LATEX]: http://lstm.seas.harvard.edu/latex/
-[pytorch]: https://pytorch.org/
+참고한 논문
+
+## 👩‍💻 Contributors
+
+## ✅ License
