@@ -14,6 +14,18 @@ def get_network(
     device,
     train_dataset,
 ):
+    """Get network
+
+    Args:
+        model_type (str): Model name that wants to use.
+        FLAGS (Flag): Configs of model.
+        model_checkpoint (dict): model checkpoint.
+        device (torch.device): Device type to use.
+        train_dataset (list): train_dataset
+
+    Returns:
+            model : model
+    """
     model = None
 
     if model_type == "SATRN":
@@ -29,6 +41,17 @@ def get_network(
 
 
 def get_optimizer(optimizer, params, lr, weight_decay=None):
+    """Get Optimizer
+
+    Args:
+        optimizer (optimizer): optimizer.
+        params (optimizer.params): optimizer.params
+        lr (optimizer.lr): optimizer LR
+        weight_decay (float, optional): weight decay (L2 penalty). Defaults to None.
+
+    Returns:
+        optimizer: optimizer
+    """
     if optimizer == "AdamP":
         optimizer = AdamP(params, lr=lr)
     elif optimizer == "Adam":
@@ -41,6 +64,13 @@ def get_optimizer(optimizer, params, lr, weight_decay=None):
 
 
 def get_wandb_config(config_file):
+    """Get Wandb config from config_file
+
+    Args:
+        config_file (str): config_file path
+    Returns:
+        config (dict): original config
+    """
     # load config file
     with open(config_file, 'r') as f:
         option = yaml.safe_load(f)

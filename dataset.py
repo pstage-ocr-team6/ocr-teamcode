@@ -14,7 +14,15 @@ SPECIAL_TOKENS = [START, END, PAD]
 
 # Rather ignorant way to encode the truth, but at least it works.
 def encode_truth(truth, token_to_id):
+    """Encoding string truth to id
 
+    Args:
+        truth (string) : ground truth
+        token_to_id (dict) : token dictionary
+
+    Returns:
+        truth(list) : List that replace truth with id
+    """
     truth_tokens = truth.split()
     for token in truth_tokens:
         if token not in token_to_id:
@@ -25,6 +33,15 @@ def encode_truth(truth, token_to_id):
 
 
 def load_vocab(tokens_paths):
+    """Load vocab from token.txt
+
+    Args:
+        tokens_paths(list) : list of token_paths
+
+    Returns:
+            token_to_id(dict) : dictionary with token in key and id in value
+            id_to_token(dict) : dictionary with id in key and token in value
+    """
     tokens = []
     tokens.extend(SPECIAL_TOKENS)
     for tokens_file in tokens_paths:
@@ -39,6 +56,13 @@ def load_vocab(tokens_paths):
 
 
 def split_gt(groundtruth, proportion=1.0, test_percent=None):
+    """Split dataset in train and test
+
+    Args:
+        groundtruth (string) : Path to ground truth text file
+        proportion (float, optional): represent the proportion of the dataset to include in the train split. Defaults to 1.0.
+        test_percent (float, optional): represent the proportion of the dataset to include in the test split. Defaults to None.
+    """
     root = os.path.join(os.path.dirname(groundtruth), "images")
     with open(groundtruth, "r") as fd:
         data=[]
@@ -57,6 +81,15 @@ def split_gt(groundtruth, proportion=1.0, test_percent=None):
 
 
 def collate_batch(data):
+    """Dataloader function 
+        Collect batch data with padding.
+
+    Args:
+        data (list) : train dataset
+
+    Returns:
+        data(list) : train dataset
+    """
     max_len = max([len(d["truth"]["encoded"]) for d in data])
     # Padding with -1, will later be replaced with the PAD token
     padded_encoded = [
@@ -73,6 +106,15 @@ def collate_batch(data):
     }
 
 def collate_eval_batch(data):
+    """Dataloader function 
+        Collect batch data with padding.
+
+    Args:
+        data (list) : eval dataset
+
+    Returns:
+        data(list) : eval dataset
+    """
     max_len = max([len(d["truth"]["encoded"]) for d in data])
     # Padding with -1, will later be replaced with the PAD token
     padded_encoded = [
@@ -221,6 +263,20 @@ class LoadEvalDataset(Dataset):
         return {"path": item["path"], "file_path":item["file_path"],"truth": item["truth"], "image": image}
 
 def dataset_loader(options, train_transformed, valid_transformed):
+    """load dataset
+        split and return dataset into train/test
+
+    Args:
+        options (Flags) : model's option
+        train_transformed (Compose) : transform to be applied on a sample.
+        valid_transformed (Compose) : transform to be applied on a sample.
+
+    Returns:
+        train_data_loader(DataLoader) : train dataloader
+        valid_data_loader(DataLoader) : valid dataloader
+        train_dataset(list) : train dataset
+        valid_dataset(list) : valid dataset
+    """
     # Read data
     train_data, valid_data = [], [] 
     if options.data.random_split:

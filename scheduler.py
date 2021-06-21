@@ -3,7 +3,16 @@ from torch.optim.lr_scheduler import _LRScheduler
 
 
 class CircularLRBeta:
-
+    """ A learning rate updater that implements the CircularLearningRate scheme.
+        Learning rate is increased then decreased linearly.
+        Args:
+            optimizer(torch.optim.optimizer) : None 
+            lr_max(float) : the highest LR in the schedule.
+            lr_divider(int) : Determined first iterarion LR. It starts from lr_max/lr_divider.
+            cut_point(int) : None
+            step_size(int) : during how many epochs will the LR go up from the lower bound, up to the upper bound.
+            momentum(list) : Optional; momentum
+    """
     def __init__(
         self, optimizer, lr_max, lr_divider, cut_point, step_size, momentum=None
     ):
@@ -68,6 +77,13 @@ class CircularLRBeta:
     
 
 class CosineAnnealingWithWarmupAndHardRestart(_LRScheduler):
+    """ 
+        optimizer (Optimizer): Wrapped optimizer.
+        warmup_steps(int): Linear warmup step size. 
+        cycle_steps (int): Cycle step size.
+        max_lr(float): First cycle's max learning rate.
+        min_lr(float): Min learning rate.
+    """
     def __init__(
         self, optimizer, warmup_steps, cycle_steps, max_lr, min_lr=None,
     ):
@@ -108,6 +124,13 @@ class CosineAnnealingWithWarmupAndHardRestart(_LRScheduler):
 
         
 class CosineDecayWithWarmup(_LRScheduler):
+    """ 
+        optimizer (Optimizer): Wrapped optimizer.
+        warmup_steps(int): Linear warmup step size.
+        total_steps (int): Total step size.
+        max_lr(float): First cycle's max learning rate.
+        min_lr(float): Min learning rate.
+    """
     def __init__(
         self, optimizer, warmup_steps, total_steps, max_lr, min_lr=None,
     ):

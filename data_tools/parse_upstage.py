@@ -23,7 +23,11 @@ import numpy as np
 
 
 def convert(args):
+    """Convert orignal dataset to comeptition's dataset format
 
+    Args:
+        args (arguments): args
+    """
     # Read JSON files
     json_files = glob.glob(os.path.join(args.input, "batch*", args.json))
     json_files.sort()

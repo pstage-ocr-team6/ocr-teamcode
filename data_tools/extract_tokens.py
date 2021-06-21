@@ -4,11 +4,25 @@ import sys
 
 
 def parse_symbols(truth):
+    """Returns the unique tokens of the groundtrurh.
+
+    Args:
+        truth(string) : groundtruth 
+
+    Returns:
+        unique_symbols(set): unique_symbols
+    """
     unique_symbols = set(truth.split())
     return unique_symbols
 
 
 def create_tokens(groundtruth, output="tokens.txt"):
+    """Save a unique tokens file for the ground trurh.
+
+    Args:
+        groundtruth (text file) : groundtruth file
+        output (str, optional): output filename. Defaults to "tokens.txt".
+    """
     with open(groundtruth, "r") as fd:
         data = fd.read()
 
