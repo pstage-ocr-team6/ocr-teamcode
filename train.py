@@ -28,7 +28,7 @@ from psutil import virtual_memory
 from flags import Flags
 from utils import get_network, get_optimizer, get_wandb_config
 from dataset import dataset_loader, PAD
-from scheduler import CircularLRBeta, #CosineDecayWithWarmup
+from scheduler import CircularLRBeta#,CosineDecayWithWarmup
 
 from metrics import word_error_rate, sentence_acc, get_worst_wer_img_path
 from custom_augment import cutout, specAugment
@@ -38,6 +38,19 @@ load_dotenv(verbose=True)
 
 
 def id_to_string(tokens, data_loader, do_eval=0):
+    """ Decoding ids to string
+    
+    Decode Tokens to Strings from First Token.
+    If meet <EOS> Token, Stop.
+    
+    Args:
+        tokens(list) : Tokens list to decode
+        data_loader(dataloader) : Dataloader
+        do_eval(int) : Whether train or eval / if eval, when meet <EOS>, stop
+    Returns:
+        result(list) : Decoded Sentence
+    """
+
     result = []
     if do_eval:
         special_ids = [data_loader.dataset.token_to_id["<PAD>"], data_loader.dataset.token_to_id["<SOS>"],
@@ -77,6 +90,7 @@ def run_epoch(
     train=True,
     vis_wandb=True,
 ):
+
     # Disables autograd during validation mode
     torch.set_grad_enabled(train)
     if train:
@@ -85,6 +99,16 @@ def run_epoch(
         model.eval()
         
     def _infer(input, expected):
+        """ Make prediction and return loss
+        Args:
+            input(tensor) : Image
+            expected(tensor) : Ground truth
+        Returns:
+            loss(tensor) : Loss between model prediction and Ground Truth
+            sequence(tensor) : Model prediction
+
+        """
+        print()
         output = model(input, expected, train, teacher_forcing_ratio)
         decoded_values = output.transpose(1, 2)
         _, sequence = torch.topk(decoded_values, 1, dim=1)
@@ -174,6 +198,7 @@ def run_epoch(
 
             if not train and vis_wandb:
                 max_wer_img_path, max_wer, gt_txt, pred_txt = get_worst_wer_img_path(d['path'], sequence_str, expected_str)
+                print('img_path_list type',type(d['path']))
                 high_wer_imgs.append(wandb.Image(
                     max_wer_img_path,
                     caption="Img: {}, WER: {:.4f} \n GT: {} \n Pred: {}".format(max_wer_img_path[-9:], max_wer, gt_txt, pred_txt)))
@@ -207,9 +232,6 @@ def run_epoch(
 
 
 def main(config_file, on_cpu):
-    """
-    Train math formula recognition model
-    """
     options = Flags(config_file).get()
 
     if options.wandb.wandb:

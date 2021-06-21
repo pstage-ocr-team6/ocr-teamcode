@@ -4,6 +4,9 @@ import torchvision.transforms.functional as F
 
 
 class RotateByDistribution(nn.Module):
+    """ Image Rotation
+        Rotate Image angle between (-34 ~ 34) or input distribution
+    """
     def __init__(self, distribution=None):
         super(RotateByDistribution, self).__init__()
         if distribution is None:

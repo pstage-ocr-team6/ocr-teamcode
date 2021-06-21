@@ -116,6 +116,15 @@ class DeepCNN300(nn.Module):
         depth=16, 
         growth_rate=24,
     ):
+        """
+        Args:
+            input_channel (int): Number of channels of the input
+            num_in_features (int) : Number of DenseBlock's Input channels
+            dropout_rate (float, optional): Probability of dropout [Default: 0.2]
+            depth (int): Number of bottleneck blocks
+            growth_rate (int): Number of new features being added per bottleneck block
+            
+        """
         super(DeepCNN300, self).__init__()
         self.conv0 = nn.Conv2d(
             input_channel,  # 3
@@ -167,7 +176,15 @@ class DeepCNN300(nn.Module):
 
 
 class ShallowConvLayer(nn.Module):
+    """ CNN layer to extract Feature map
+    """
     def __init__(self, in_channels, out_channels):
+        """
+        Args:
+            input_channel (int): Number of channels of the input
+            output_channel (int): Number of channels of the output
+            
+        """
         super(ShallowConvLayer, self).__init__()
         
         self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1, bias=False)
@@ -184,7 +201,16 @@ class ShallowConvLayer(nn.Module):
 
 
 class ShallowCNNBlock(nn.Module):
+    """ CNN Bolck to extract Feature map
+    """
     def __init__(self, in_channels, out_channels, filter_size=None, dropout_prob=0.5):
+        """
+        Args:
+            in_channels (int): Number of channels of the input
+            out_channels (int): Number of channels of the output
+            filter_size (int) : Filter size of CNN
+            dropout_prob (float, optional): Probability of dropout [Default: 0.5]
+        """
         super(ShallowCNNBlock, self).__init__()
         
         if filter_size is None:
@@ -203,7 +229,18 @@ class ShallowCNNBlock(nn.Module):
     
     
 class ScaledDotProductAttention(nn.Module):
+    """
+    Scale Dot Product for attention
+
+    """
+    
     def __init__(self, temperature, dropout=0.1):
+        """
+        Args:
+            temperature (int): Number to reduce variance 
+            dropout (float, optional): Probability of dropout [Default: 0.1]
+        """
+
         super(ScaledDotProductAttention, self).__init__()
 
         self.temperature = temperature
@@ -221,6 +258,14 @@ class ScaledDotProductAttention(nn.Module):
 
 class MultiHeadAttention(nn.Module):
     def __init__(self, q_channels, k_channels, head_num=8, dropout=0.1):
+        """
+        Args:
+            q_channels(int) :Number of channel of query
+            k_channels(int) : Number of channel of key,value
+            head_num (int) : Number of head of attention [Default: 8]
+            dropout (float, optional): Probability of dropout [Default: 0.1]
+        """
+        
         super(MultiHeadAttention, self).__init__()
 
         self.q_channels = q_channels
@@ -272,6 +317,13 @@ class MultiHeadAttention(nn.Module):
 
 class Feedforward(nn.Module):
     def __init__(self, filter_size=2048, hidden_dim=512, dropout=0.1):
+        """
+        Args:
+            filter_size(int) :Number of channel of output
+            hidden_dim(int) : Number of channel of hidden dimension
+            dropout (float, optional): Probability of dropout [Default: 0.1]
+        """
+        
         super(Feedforward, self).__init__()
 
         self.layers = nn.Sequential(
@@ -297,6 +349,14 @@ class ConvLayerForFeedforward(nn.Module):
         groups=1, 
         bias=False,
     ):
+        """
+        Args:
+            in_channels(int) : Number of channel of input
+            out_channels(int) : Number of channel of output
+            kernel_size (int) : Size of CNN layer
+            padding (int): Number of padding [Default: 0]
+            dropout (float, optional): Probability of dropout [Default: 0.1]
+        """
         super(ConvLayerForFeedforward, self).__init__()
         self.conv = nn.Conv2d(
             in_channels, 
@@ -317,6 +377,10 @@ class ConvLayerForFeedforward(nn.Module):
 
 
 class LocalityAwareFeedforward(nn.Module):
+    """ 
+    Feed forward network to gain local information
+    
+    """
     def __init__(
         self, 
         hidden_dim, 
@@ -324,6 +388,14 @@ class LocalityAwareFeedforward(nn.Module):
         dropout_prob=0.1, 
         separable=True
     ):
+        """
+        Args:
+            hidden_dim(int) : Number of channel of input
+            filter_size(int) : Number of channel of output
+            kernel_size (int) : Size of CNN layer
+            dropout (float, optional): Probability of dropout [Default: 0.1]
+            separable (bool) : If true, use separable feedforward
+        """
         super(LocalityAwareFeedforward, self).__init__()
         if separable:
             self.layer_in = ConvLayerForFeedforward(
@@ -374,6 +446,7 @@ class LocalityAwareFeedforward(nn.Module):
 
 
 class TransformerEncoderLayer(nn.Module):
+
     def __init__(
         self, 
         input_size, 
@@ -383,6 +456,15 @@ class TransformerEncoderLayer(nn.Module):
         conv_ff=True, 
         separable_ff=True, 
     ):
+        """
+        Args:
+            input_size(int) : Number of channel of input
+            filter_size(int) : Number of channel of output
+            head_num (int) : Number of attention heads
+            dropout (float, optional): Probability of dropout [Default: 0.2]
+            conv_ff (bool) : If true, use conv feedforward
+            separable_ff (bool) : If true, use separable feedforward
+        """
         super(TransformerEncoderLayer, self).__init__()
 
         self.attention_layer = MultiHeadAttention(
@@ -428,6 +510,15 @@ class TransformerEncoderLayerWith2DAttention(nn.Module):
         conv_ff=True, 
         separable_ff=True, 
     ):
+        """
+        Args:
+            input_size(int) : Number of channel of input
+            filter_size(int) : Number of channel of output
+            head_num (int) : Number of attention heads
+            dropout (float, optional): Probability of dropout [Default: 0.2]
+            conv_ff (bool) : If true, use conv feedforward
+            separable_ff (bool) : If true, use separable feedforward
+        """
         super(TransformerEncoderLayerWith2DAttention, self).__init__()
 
         self.attention_layer = MultiHeadAttention(
@@ -459,7 +550,14 @@ class TransformerEncoderLayerWith2DAttention(nn.Module):
 
 
 class AdaptiveGate(nn.Module):
+    """
+    AdaptiveGate for Positional Encoding
+    """
     def __init__(self, in_channels):
+        """
+        Args:
+            in_channels(int) : Number of channel of input
+        """
         super(AdaptiveGate, self).__init__()
         
         self.linear_1 = nn.Linear(in_channels, in_channels // 2)
@@ -484,7 +582,18 @@ class AdaptiveGate(nn.Module):
 
 
 class PositionalEncoding2D(nn.Module):
+    """
+    2D Positional Encdoing for Feature map to gain 2D information
+    """
     def __init__(self, in_channels, max_h=64, max_w=128, dropout=0.1):
+        """
+        Args:
+            in_channels(int) : Number of channel of input
+            max_h(int) : Height of Input
+            max_w(int) : width of Input
+            dropout (float): Probability of dropout [Default: 0.1]
+        """
+        
         super(PositionalEncoding2D, self).__init__()
 
         self.h_position_encoder = self.generate_encoder(in_channels // 2, max_h)
@@ -496,6 +605,11 @@ class PositionalEncoding2D(nn.Module):
         self.dropout = nn.Dropout(p=dropout)
 
     def generate_encoder(self, in_channels, max_len):
+        """ Generate Positional Encoding
+        Args:
+            in_channels(int) : Number of channel of input
+            max_len(int) : Length of input
+        """
         pos = torch.arange(max_len).float().unsqueeze(1)
         i = torch.arange(in_channels).float().unsqueeze(0)
         angle_rates = 1 / torch.pow(10000, (2 * (i // 2)) / in_channels)
@@ -532,6 +646,7 @@ class PositionalEncoding2D(nn.Module):
 
 class AdaptivePositionalEncoding2D(nn.Module):
     """
+        2D Adaptive Positional Encoding for Feature map to gain 2D information
             b: batch size
             c: in_channels
             h: height
@@ -539,6 +654,13 @@ class AdaptivePositionalEncoding2D(nn.Module):
             d: max_len
     """
     def __init__(self, in_channels, max_h=128, max_w=64, dropout=0.1):
+        """
+        Args:
+            in_channels(int) : Number of channel of input
+            max_h(int) : Height of Input
+            max_w(int) : width of Input
+            dropout (float): Probability of dropout [Default: 0.1]
+        """
         super(AdaptivePositionalEncoding2D, self).__init__()
 
         self.h_position_encoder = self.generate_encoder(in_channels, max_h)
@@ -550,6 +672,11 @@ class AdaptivePositionalEncoding2D(nn.Module):
         self.dropout = nn.Dropout(p=dropout)
 
     def generate_encoder(self, in_channels, max_len):
+        """ Generate Positional Encoding
+        Args:
+            in_channels(int) : Number of channel of input
+            max_len(int) : Length of input
+        """
         pos = torch.arange(max_len).float().unsqueeze(1) # (d, 1)
         i = torch.arange(in_channels).float().unsqueeze(0) # (1, c)
         angle_rates = 1 / torch.pow(10000, (2 * (i // 2)) / in_channels) # (1, c)
@@ -606,6 +733,22 @@ class TransformerEncoderFor2DFeatures(nn.Module):
         dropout_rate=0.1,
         checkpoint=None,
     ):
+        """
+        Args:
+            input_size(int) : Number of channel of input
+            hidden_dim (int) : Number of channel of hidden dimension
+            filter_size(int) : Number of channel of output
+            layer_num (int) : Number of attention layers
+            max_enc_len (int) : Max length of label
+            shallower_cnn(bool) : If True, use shallow CNN
+            adaptive_gate(bool) : If True, use adaptive poisitional Encoding
+            head_num (int) : Number of attention heads
+            conv_ff (bool) : If true, use conv feedforward
+            separable_ff (bool) : If true, use separable feedforward
+            dropout (float, optional): Probability of dropout [Default: 0.2]
+            checkpoint(str) : Path of checkpoint
+        """
+
         super(TransformerEncoderFor2DFeatures, self).__init__()
 
         if not shallower_cnn:
@@ -664,6 +807,14 @@ class TransformerEncoderFor2DFeatures(nn.Module):
 
 class TransformerDecoderLayer(nn.Module):
     def __init__(self, input_size, src_size, filter_size, head_num, dropout_rate=0.2):
+        """
+        Args:
+            input_size(int) : Number of channel of input
+            src_size (int) : Number of channel of hidden size
+            filter_size(int) : Number of channel of output
+            head_num (int) : Number of attention heads
+            dropout (float, optional): Probability of dropout [Default: 0.2]
+        """
         super(TransformerDecoderLayer, self).__init__()
 
         self.self_attention_layer = MultiHeadAttention(
@@ -713,6 +864,12 @@ class TransformerDecoderLayer(nn.Module):
 
 class PositionEncoder1D(nn.Module):
     def __init__(self, in_channels, max_len=500, dropout=0.1):
+        """
+        Args:
+            in_channels(int) : Number of channel of input
+            max_len(int) : Max len of input
+            dropout (float, optional): Probability of dropout [Default: 0.2]
+        """
         super(PositionEncoder1D, self).__init__()
 
         self.position_encoder = self.generate_encoder(in_channels, max_len)
@@ -754,6 +911,19 @@ class TransformerDecoder(nn.Module):
         layer_num=1,
         checkpoint=None,
     ):
+        """
+        Args:
+            num_classes(int) : Number of classes
+            src_dim(int) : Number of channel of input
+            hidden_dim(int) : Number of channel of hiddensize
+            filter_dim(int) : Number of channel of output
+            head_num(int) : Number of attention heads
+            dropout_rate(float) : dropout rate 
+            pad_id(int) : Pad token id
+            st_id(int) : SOS token id
+            layer_num(int) : Number of attention layers 
+            checkpoint(str) : path of checkpoint
+        """
         super(TransformerDecoder, self).__init__()
 
         self.embedding = nn.Embedding(num_classes + 1, hidden_dim)
