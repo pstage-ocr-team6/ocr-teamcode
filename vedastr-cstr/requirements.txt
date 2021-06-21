@@ -1,0 +1,11 @@
+numpy
+opencv-python
+addict
+six
+torch>=1.6.*
+torchvision>=0.7.*
+pillow>=6.0,<7.0
+lmdb
+nltk
+terminaltables
+albumentations
