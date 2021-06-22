@@ -9,6 +9,17 @@ output_dir = "gt-split"
 
 # Split the ground truth into train, test sets
 def split_gt(groundtruth, test_percent=0.2, data_num=None):
+    """Split the ground truth into train, test sets
+
+    Args:
+        groundtruth (text file) : ground truth file
+        test_percent (float) : represent the proportion of the dataset to include in the test split. Defaults to 0.2.
+        data_num (int) : represents the absolute number of test samples. Defaults to None.
+
+    Returns:
+        train dataset
+        test dataset
+    """
     with open(groundtruth, "r") as fd:
         data = fd.read()
         data = data.split('\n')

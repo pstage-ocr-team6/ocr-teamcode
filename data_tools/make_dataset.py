@@ -14,16 +14,18 @@ InteractiveShell.ast_node_interactivity = "all"
 '''
 
 def create_data_frame(default_image_path:str,data_path:str,level_path:str,source_path:str):
-    '''
-        데이터 프레임 만들기
-        이미지 평균을 내야되서 시간이 좀 많이 걸립니다.
+    """Make DatFrame
+       It takes few minutes to calculate imgae brigtness average 
 
-        input : 
-            default_image_path : 이미지 경로 (끝에가 '/'로 끝나야됨)
-            data_path : gt.txt 경로
-            level_path : level.txt 경로
-            source_path : source.txt경로
-    '''
+    Args:
+        default_image_path (str):  Image path (It must end with '/')
+        data_path (str): gt.txt path
+        level_path (str): level.txt path
+        source_path (str): source.txt path
+
+    Returns:
+        df (Dataframe): Dataframe of dataset.
+    """
     data = {}
     data['latex'] = [] # groung truth
     data['seq_len'] = [] # ground truth 길이
@@ -69,41 +71,62 @@ def create_data_frame(default_image_path:str,data_path:str,level_path:str,source
 
 
 def split_dataset(df,n_splits):
-    '''
-        input : dataframe, 몇개로 나눌건지
-        outpur : (train_index, test_index) 
-    '''
+    """Stratified K-Folds cross-validator.
+        Provides first train/test indices to split data in train/test sets.
+
+    Args:
+        df (Dataframe) : datafram to split
+        n_splits (int) : Number of folds. Must be at least 2.
+
+    Returns:
+        (train_index, test_index) (tuple) :
+                train_index : The first training set indices for that split.
+                test_index : The first testing set indices for that split.
+    """
     skf=StratifiedKFold(n_splits=n_splits)
     return next(iter(skf.split(df,df['dummy'])))
 
 
 def convert_filename(x):
-    '''
-        input : 파일 번호 (dataframe index)
-        ouput : ground truth 형식에 맞는 str
-    '''
+    """Dataframe's map function 
+        Replaces the image number of the custom dataset to ground truth format.
+
+    Args:
+        x (int) : Image num to convert
+
+    Returns:
+        Filename of ground truth format(str)
+    """
     return f'train_{str(x).zfill(5)}.jpg'
 
 
 def list_latex2str(x):
-    '''
-        input : latex가 담긴 list
-        output : ground truth 형식에 맞는 str
-    '''
+    """Dataframe's map function 
+        Replaces the latex of the custom dataset to ground truth format.
+
+    Args:
+        x (list) : latex string to convert
+
+    Returns:
+        latex of ground truth format(str)
+    """
     return ' '.join(x)
 
 
 def plot_dist(df, field, bins, color, xlabel, ylabel, title):
-    '''
-        input : 
-            df : 분포를 보고싶은 dataframe
-            field : 분포를 보고 싶은 dataframe의 column
-            bins : 보여질 막대 그래프 수
-            color : 보고 싶은 색
-            xlabel : x 축 라벨
-            ylabel : y 축 라벨
-            title : 보여질 그래프 제목
-    '''
+    """Visualize DatFrame's column
+
+    Args:
+        df (Dataframe) :  Dataframe to visualize
+        field (string) : The column of the Dataframe that want to see the distribution from.
+        bins (int) : Number of bar graphs to show.
+        color (string) : Color want to see.
+        xlabel ((string) : x-axis label.
+        ylabel (string) : y-axis label.
+        title (string) : Graph title.
+    Returns: 
+            None
+    """
     sns.set(color_codes=True)
     fig, ax = plt.subplots(figsize=(18,6))
     sns.distplot(df[field], bins=bins, color=color, ax=ax)
@@ -114,10 +137,16 @@ def plot_dist(df, field, bins, color, xlabel, ylabel, title):
 
 
 def create_small_dataset():
-    '''
-        더 작은 크기의 데이터 셋을 만들고
-        train, test index 파일을 저장 합니다.
-    '''
+    """Make smaller dataset
+        Save new train & test dataset in text file
+        Args:
+            root_dir(str) : root_dir path
+            n_splits(int) : Number of folds. Must be at least 2.
+            filename(str,optinal) : Filename to be saved
+            is_visual(bool,optinal) : if True visualize dataframe plot
+        Returns: 
+            None
+    """
     root_dir="/opt/ml/input/data/train_dataset"
 
     # 데이터 프레임 만들기

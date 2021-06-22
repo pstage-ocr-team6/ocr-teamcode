@@ -3,12 +3,27 @@ import torch.nn.functional as F
 
     
 class LabelSmoothingCrossEntropy(nn.Module):
+    """
+    Label Smoothing Cross Entropy
+
+    A Cross Entropy with Label Smooothing
+    
+    """
+    
     def __init__(self, eps: float = 0.1, reduction='mean', ignore_index=-100):
+        """
+        Args:
+            eps(float) :Rate of Label Smoothing
+            reduction(str) : The way of reduction [mean, sum]
+            ignore_index(int) : Index wants to ignore
+        """
+        
         super(LabelSmoothingCrossEntropy, self).__init__()
         self.eps, self.reduction = eps, reduction
         self.ignore_index = ignore_index
 
     def forward(self, output, target, *args):
+        
         output = output.transpose(1,2)
         
         pred = output.contiguous().view(-1, output.shape[-1])

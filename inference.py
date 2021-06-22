@@ -14,7 +14,10 @@ from tqdm import tqdm
 
 
 def main(parser):
+    """Inference code
+    """
     is_cuda = torch.cuda.is_available()
+    # load pretrained model checkpoint
     checkpoint = load_checkpoint(parser.checkpoint, cuda=is_cuda)
     options = Flags(checkpoint["configs"]).get()
     torch.manual_seed(options.seed)
@@ -35,6 +38,7 @@ def main(parser):
         )
     print(options.input_size.height)
 
+    # transform to be applied on a sample.
     transformed = transforms.Compose(
         [
             transforms.Resize((options.input_size.height, options.input_size.width)),
@@ -43,7 +47,7 @@ def main(parser):
     )
 
     dummy_gt = "\sin " * parser.max_sequence  # set maximum inference sequence
-
+    # make dataset from test folder
     root = os.path.join(os.path.dirname(parser.file_path), "images")
     with open(parser.file_path, "r") as fd:
         reader = csv.reader(fd, delimiter="\t")
@@ -86,7 +90,7 @@ def main(parser):
         sequence_str = id_to_string(sequence, test_data_loader, do_eval=1)
         for path, predicted in zip(d["file_path"], sequence_str):
             results.append((path, predicted))
-
+    # save inference results as csv file
     os.makedirs(parser.output_dir, exist_ok=True)
     with open(os.path.join(parser.output_dir, "output.csv"), "w") as w:
         for path, predicted in results:

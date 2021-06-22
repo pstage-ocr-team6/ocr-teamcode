@@ -5,11 +5,14 @@ import imutils
 
 
 def img_equal_clahe_yuv(img):
-    ''' yuv 채널을 이용해 equalize, clahe를 적용합니다.
-        input : 3채널 이미지
+    """Apply equalize, clahe into image with YUV channels.
 
-        output : 균등화된 이미지(equalize image), clahe 적용된 이미지 
-    '''
+    Args:
+        img (image) : Image
+    Returns:
+        img_eq (image):  Image with equalize applied
+        img_clahe (image): Image with clahe applied
+    """
     img_yuv = cv2.cvtColor(img, cv2.COLOR_BGR2YUV)
 
     img_eq = img_yuv.copy()
@@ -24,20 +27,25 @@ def img_equal_clahe_yuv(img):
 
 
 def img_normalize(img):
-    ''' 이미지를 normalize 합니다.
-        input : 3채널 이미지
-        output : normalized image
-    '''
+    """Normalize image
+
+    Args:
+        img (image) : Image
+
+    Returns:
+        img_norm (image): Image with normalize applied
+    """
     img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     img_norm = cv2.normalize(img_gray, None, 0, 255, cv2.NORM_MINMAX)
     return img_norm
 
 
 def show_hist(img):
-    ''' 이미지의 histogram을 보여줍니다.
-        input : gray 이미지
-        output : None
-    '''
+    """Visual histogram of image
+
+    Args:
+        img (image) : Gray scale image
+    """
     plt.hist(img.flatten(), 256, [0, 256], color = 'r')
     plt.xlim([0, 256])
     plt.show()
@@ -45,11 +53,14 @@ def show_hist(img):
 
 
 def img_clahe_luminus(img):
-    ''' lab 채널을 이용해 equalize, clahe를 적용합니다.
-        input : 3채널 이미지
+    """Apply equalize, clahe into image with LAB channels.
 
-        output : 균등화된 이미지(equalize image), clahe 적용된 이미지 
-    '''
+    Args:
+        img (image) : Image
+    Returns:
+        img_eq (image):  Image with equalize applied
+        img_clahe (image): Image with clahe applied
+    """
     lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)  # luminosity(명도)채널을 얻기 위해 채널을 BGR->LAB 로 바꿈
     l, a, b = cv2.split(lab) # 채널 분리
 
@@ -65,10 +76,14 @@ def img_clahe_luminus(img):
 
 
 def remove_line(gray):
-    ''' 가로가 긴(width의 절반 이상)
-        input : gray 이미지
-        output : 긴 선이 제거된 binary 이미지
-    '''
+    """Remove long line
+
+    Args:
+        gray (image): Gray scale image
+
+    Returns:
+        255 - result: Binary image with removed long line.
+    """
     h,w = gray.shape[:2] # h, w
     # gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)  # gray 채널
     thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]  #OTSU 방법을 이용해 binary 이미지 변환
@@ -98,10 +113,15 @@ def remove_line(gray):
 
 
 def global_threshold1(gray):
-    ''' global threshold를 사용해 binary 이미지
-        input : gray 이미지
-        output : return 되는 binary 이미지와 같은 크기의 gray image, binary 이미지
-    '''
+    """Binary image using global threshold
+
+    Args:
+         gray (image): Gray scale image
+
+    Returns:
+        gray (image) : Resize gray scale image (It has same size with returned binray image)
+        255 - closing (image) : Binary image
+    """
     h, w = gray.shape[:2] # h, w
     if w > 1000 and h > 100: # 가로 세로가 일정 수치 보다 크면 30%씩 줄임
         gray=cv2.resize(gray, dsize=(0, 0), fx=0.3, fy=0.3, interpolation=cv2.INTER_LINEAR)
@@ -114,10 +134,15 @@ def global_threshold1(gray):
 
 
 def remove_brightness(gray):
-    ''' 밝기 편차가 심한 이미지들을 binary 이미로 만들기
-        input : gray 이미지
-        output : return 되는 binary 이미지와 같은 크기의 gray image, binary 이미지
-    '''
+    """Applt binary to image with severe brightness deviation.
+
+    Args:
+         gray (image): Gray scale image
+
+    Returns:
+        gray (image) : Resize gray scale image (It has same size with returned binray image)
+        255 - closing (image) : Binary image
+    """
     h, w = gray.shape[:2]
     if w > 1000 and h > 100: # 가로 세로가 일정 수치 보다 크면 30%씩 줄임
         gray=cv2.resize(gray, dsize=(0, 0), fx=0.3, fy=0.3, interpolation=cv2.INTER_LINEAR)
@@ -133,10 +158,11 @@ def remove_brightness(gray):
     
 
 def show_x_y_hist(img):
-    ''' x,y방향으로 이미지 평균을 보여줍니다.
-        input : 3채널 이미지
-        output : None
-    '''
+    """Visual image's the image mean in the x,y axis.
+
+    Args:
+        img (image) : Image
+    """
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     h, w = gray.shape[:2]
     temp = []
@@ -179,10 +205,15 @@ def sliding_window(image, stepSize, windowSize):
 
 
 def sliding_window1(gray):
-    ''' sliding window 방식으로 이미지 밝기 편차를 확인 합니다.
-        input : gray 이미지
-        output: 이미지의 부분 마다의 밝기 max, min
-    '''
+    """Check the image brightness deviation using the sliding window method.
+
+    Args:
+        gray (image): Gray scale image
+
+    Returns:
+        _max (float) : maximum brightness of image.
+        _min (float) : minimum brightness of image.
+    """
     h, w = gray.shape[:2]
     (w_width, w_height) = (w // 3, h // 3) # sliding_window 크기
     dead_line = min(w // 10, h // 10) # sliding_window의 종료 지점
@@ -205,10 +236,15 @@ def sliding_window1(gray):
 
 
 def sliding_window2(gray):
-    ''' sliding window 방식으로 이미지 밝기 편차를 확인 합니다. 한 sliding window가 끝나면  window 사이즈가 1.5배 증가하고 다시 sliding_windwo를 합니다.
-        input : gray 이미지
-        output: 이미지의 부분 마다의 밝기 max, min
-    '''
+    """Check the image brightness deviation using the sliding window method.
+
+    Args:
+        gray (image): Gray scale image
+
+    Returns:
+        _max (float) : maximum brightness of image.
+        _min (float) : minimum brightness of image.
+    """
     h, w = gray.shape[:2]
     _max = 0
     _min = np.inf

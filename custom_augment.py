@@ -9,10 +9,8 @@ import torch
 
 
 class to_binary(object):
+    """ Gray scale image to binary image.
     """
-    binary_image로 만듭니다.(약간의 전처리와 함께)
-    """
-    
     def __call__(self, sample):
         gray = np.array(sample)
         orig_mean = gray.mean()
@@ -33,10 +31,14 @@ class to_binary(object):
 
 
 class cutout(object):
-    ''' cutout 
-        input : mask_size -> 가릴 박스 사이즈, p -> mask가 생길 확률, cutout_inside -> 이미지안에 생길건지(bool), max_boxes -> 박스가 생길 최대 수
-        output : cutout 된 image(PIL.Image)
-    '''
+    """Cutout
+
+    Args:
+        mask_size (int): Size of boxes to cut out of each image.
+        p (float): Cutout probability. (0~1)
+        cutout_inside (bool): If true, generate maskes inside image. If false, maskes can be generated outside of image.
+        max_boxes (int): Number of boxes to cut out of each image.
+    """
     def __init__(self, mask_size, p, cutout_inside, max_boxes):
         self.mask_size = mask_size
         self.p = p
@@ -77,9 +79,12 @@ class cutout(object):
 
 
 class specAugment(object):
-    ''' 멘토님이 추천해 주셨던 specAugment
-        totensor 다음 쓰시는게 깔끔합니다.
-    '''
+    """https://github.com/zcaceres/spec_augment
+        Args:
+            row_num_masks (int) : Number of row_maskes to draw image of each image.
+            col_num_masks (int) : Number of column_maskes to draw image of each image.
+            replace_with_zero (bool) : If true, masked with zero. Defaults to True.
+    """
     def __init__(self, row_num_masks, col_num_masks, replace_with_zero=True):
         self.row_num_masks = row_num_masks
         self.col_num_masks = col_num_masks
@@ -94,43 +99,25 @@ class specAugment(object):
         combined = col_mask(row_mask(image, num_masks=2, replace_with_zero=True), num_masks=1, replace_with_zero=True)
         combined = transforms.ToPILImage()(combined).convert("L")
         return combined
-
-
-def time_warp(spec, W=5):
-    ''' 이미지를 랜덤으로 왜곡 시킵니다. 
-        https://stackoverflow.com/questions/57371510/sparse-image-warp-in-tensorflow-doesnt-work
-
-        input : spec -> image(tensor), W -> warp 범위
-        output: 왜곡된 image(tensor)
-    '''
-    num_rows = spec.shape[1]
-    spec_len = spec.shape[2]
-    device = spec.device
-    
-    y = num_rows // 2
-    horizontal_line_at_ctr = spec[0][y]
-    assert len(horizontal_line_at_ctr) == spec_len
-    
-    point_to_warp = horizontal_line_at_ctr[random.randrange(W, spec_len - W)]
-    assert isinstance(point_to_warp, torch.Tensor)
-
-    # Uniform distribution from (0,W) with chance to be up to W negative
-    dist_to_warp = random.randrange(-W, W)
-    src_pts, dest_pts = (torch.tensor([[[y, point_to_warp]]], device=device), 
-                        torch.tensor([[[y, point_to_warp + dist_to_warp]]], device=device))
-    warped_spectro, dense_flows = sparse_image_warp(spec, src_pts, dest_pts)
-    return warped_spectro.squeeze(3)
     
 
 def row_mask(spec, F=10, num_masks=1, replace_with_zero=False):
-    ''' 행 방향으로 선을 긋습니다.
-        input : spec -> image(tensor), F -> 선의 최대 길이 , num_masks -> 그어질 선의 개수 , replace_with_zero -> 0으로 값을 채울건지
-        output : 선이 그어진 image(tensor)
-    '''
+    """ Row masking is applied so that f consecutive mel frequency channels [f0, f0 + f) are masked, 
+        where f is first chosen from a uniform distribution from 0 to the frequency mask parameter F, 
+        and f0 is chosen from 0, ν − f). ν is the number of mel frequency channels.
+
+        Args:
+            spec (image, tensor type) : Image
+            F (int) : Max length of line. Defaults to 10.
+            num_masks (int) : Number of maskes to draw image of each image. Defaults to 1.
+            replace_with_zero (bool) : If true, masked with zero. Defaults to False.
+        Return:
+            cloned (image,tensor) : image with line
+    """
     cloned = spec.clone()
     num_mel_channels = cloned.shape[1]
     num_masks=random.randrange(0, 2)
-    for i in range(0, num_masks):        
+    for i in range(0, num_masks):
         f = random.randrange(1, F)
         f_zero = random.randrange(0, num_mel_channels - f)
 
@@ -140,15 +127,23 @@ def row_mask(spec, F=10, num_masks=1, replace_with_zero=False):
         mask_end = random.randrange(f_zero, f_zero + f) 
         if (replace_with_zero): cloned[0][f_zero:mask_end] = 0
         else: cloned[0][f_zero:mask_end] = cloned.mean()
-    
+
     return cloned
 
 
 def col_mask(spec, T=10, num_masks=1, replace_with_zero=False):
-    ''' 열 방향으로 선을 긋습니다.
-        input : spec -> image(tensor), F -> 선의 최대 길이 , num_masks -> 그어질 선의 개수 , replace_with_zero -> 0으로 값을 채울건지
-        output : 선이 그어진 image(tensor)
-    '''
+    """ Column masking is applied so that t consecutive time steps [t0, t0 + t) are masked, 
+        where t is first chosen from a uniform distribution from 0 to the time mask parameter T, and t0 is chosen from [0, τ − t). 
+        We introduce an upper bound on the time mask so that a time mask cannot be wider than p times the number of time steps.
+
+        Args:
+            spec (image, tensor type) : Image
+            T (int) : Max length of line. Defaults to 10.
+            num_masks (int) : Number of maskes to draw image of each image. Defaults to 1.
+            replace_with_zero (bool) : If true, masked with zero. Defaults to False.
+        Return:
+            cloned (image,tensor) : image with line
+    """
     cloned = spec.clone()
     len_spectro = cloned.shape[2]
     num_masks=random.randrange(0, 2)
