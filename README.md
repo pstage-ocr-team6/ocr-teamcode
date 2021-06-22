@@ -40,6 +40,8 @@
 
 수식 인식(Latex Recognition)은 **수식 이미지에서 LaTeX 포맷의 텍스트를 인식하는 태스크**로, 문자 인식(Character Recognition)과 달리 수식 인식의 경우 `좌 → 우` 뿐만 아니라 Multi-line에 대해서 `위 → 아래`에 대한 순서 패턴 학습도 필요하다는 특징을 가집니다.
 
+<br/>
+
 ## 📁 File Structure
 
 ### Code Folder
@@ -93,6 +95,8 @@ input/data/train_dataset
 ├── source.txt              # printed output / hand written feature
 └── tokens.txt              # vocabulary for training
 ```
+
+<br/>
 
 ## ✨ Getting Started
 
@@ -248,6 +252,8 @@ wandb:
   run_name: "sample_run" # wandb project run name
 ```
 
+<br/>
+
 ## ⏩ Usage
 
 ### Train
@@ -270,11 +276,14 @@ python inference.py [--checkpoint] [--max_sequence] [--batch_size] [--file_path]
 - `--file_path`: test dataset 경로
 - `--output_dir`: inference 결과 저장 디렉토리
 
+<br/>
+
 ## 🚀 Demo
 
 <div align="center">
-<img src="assets/demo.png" alt="demo" width="80%">
+<img src="assets/demo.png" alt="demo">
 </div>
+<br/>
 
 ## 📖 References
 
@@ -291,11 +300,16 @@ python inference.py [--checkpoint] [--max_sequence] [--batch_size] [--file_path]
 - <i>Google’s Neural Machine Translation System: Bridging the Gap between Human and Machine Translation, Wu et
   al., 2016</i>
 
+<br/>
+
 ## 👩‍💻 Contributors
 
 |                           **[김종영](https://github.com/kjy93217)**                            |                           **[민지원](https://github.com/peacecheejecake)**                            |                                                    **[박소현](https://github.com/CoodingPenguin)**                                                    |                              **[배수민](https://github.com/bsm8734)**                               |                           **[오세민](https://github.com/osmosm7)**                            |                              **[최재혁](https://github.com/opijae)**                               |
 | :--------------------------------------------------------------------------------------------: | :---------------------------------------------------------------------------------------------------: | :---------------------------------------------------------------------------------------------------------------------------------------------------: | :-------------------------------------------------------------------------------------------------: | :-------------------------------------------------------------------------------------------: | :------------------------------------------------------------------------------------------------: |
 | [![Avatar](https://avatars.githubusercontent.com/u/39907037?v=4)](https://github.com/kjy93217) | [![Avatar](https://avatars.githubusercontent.com/u/29668380?v=4)](https://github.com/peacecheejecake) | [![Avatar](https://avatars.githubusercontent.com/u/37505775?s=460&u=44732fef53503e63d47192ce5c2de747eff5f0c6&v=4)](https://github.com/CoodingPenguin) | [![Avatar](https://avatars.githubusercontent.com/u/35002768?s=460&v=4)](https://github.com/bsm8734) | [![Avatar](https://avatars.githubusercontent.com/u/48181287?v=4)](https://github.com/osmosm7) | [![Avatar](https://avatars.githubusercontent.com/u/26226101?s=460&v=4)](https://github.com/opijae) |
+
+
+<br/>
 
 ## ✅ License
 
