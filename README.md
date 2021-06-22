@@ -13,11 +13,14 @@
 ## 📝 Table of Contents
 
 - [Latex Recognition Task](#-latex-recognition-task)
-- [Installation](#-installation)
 - [File Structure](#-file-structure)
+  - [Code Folder](#code-folder)
+  - [Dataset Folder](#dataset-folder)
 - [Getting Started](#-getting-started)
   - [Installation](#installation)
+  - [Download Dataset](#download-dataset)
   - [Dataset Setting](#dataset-setting)
+  - [Create .env for wandb](#create-env-for-wandb)
   - [Config Setting](#config-setting)
 - [Usage](#-usage)
   - [Train](#train)
