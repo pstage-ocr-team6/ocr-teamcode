@@ -1,7 +1,3 @@
-<div align="center">
-    <h1>Supported Models</h1>
-</div>
-
 # Supported Models
 
 ## SATRN
